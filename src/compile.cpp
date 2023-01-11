@@ -11,11 +11,17 @@
 
 enum TOKEN
 {
-    ivar = -1,
-    itype = -2,
-    iop = -3,
-    expi = -4,
+    ivar = -2,
+    itype = -3,
+    iop = -4,
+    expi = -5,
     ok = 0,
+    strtexpr,
+    endexpr,
+
+    vset,
+    val,
+    ident,
 
     decl,
     fwhile,
@@ -23,6 +29,7 @@ enum TOKEN
     fthen,
     fend,
 
+    type,
     fnum,
     str
 };
@@ -76,12 +83,12 @@ class vardeclAST : public exprAST
     vardeclAST(const std::string& name, const bool& initialized) : name(name), initialized(initialized) {}
 };
 
-std::vector<std::pair<std::string, exprAST>> keywords =
+std::vector<std::pair<std::string, int>> keywords =
 {
-    {"new", declAST()}
+    {"new", decl}
 };
 
-std::unordered_map<std::string, exprAST> keywordmap(keywords.begin(), keywords.end());
+std::unordered_map<std::string, int> keywordmap(keywords.begin(), keywords.end());
 
 std::vector<std::pair<std::string, exprAST>> stdtypes =
 {
@@ -92,7 +99,7 @@ std::vector<std::pair<std::string, exprAST>> stdtypes =
 
 std::unordered_map<std::string, exprAST> usrtypes(stdtypes.begin(), stdtypes.end());
 
-std::vector<std::unique_ptr<exprAST>> exprstack = {};
+std::vector<int> exprstack = {};
 
 static FILE* fi = nullptr;
 
@@ -102,10 +109,17 @@ static std::string identnum = "";
 static int GetToken()
 {
     static int lastchar = ok;
+    static int laststate = ok;
 
     while(isspace(lastchar))
     {
         lastchar = getc(fi);
+    }
+
+    if (lastchar == '=')
+    {
+        lastchar = getc(fi);
+        return vset;
     }
 
     if (isalpha(lastchar))
@@ -116,56 +130,89 @@ static int GetToken()
             identstr += (char)lastchar;
         } while (isalnum((lastchar = getc(fi))));
         
+        lastchar = getc(fi);
         {
             if (identstr == "new")
             {
+                
                 return decl;
             }
         }
         {
             if (identstr == "Float")
             {
-                return fnum;
+                return type;
             }
         }
 
-
-        return expi;
+        return ident;
     }
+
+    if (isdigit(lastchar))
+    {
+        lastchar = getc(fi);
+        return val;
+    }
+    if (lastchar == EOF)
+    {
+        return EOF;
+    }
+    lastchar = getc(fi);
+    return strtexpr;
 }
 
 static std::unique_ptr<exprAST> ParseDecl()
 {
-
+    return nullptr;
 }
 
 static std::unique_ptr<exprAST> ParseDouble()
 {
-
+    return nullptr;
 }
 
-static void ParseToplevel()
+static int ParseToplevel()
 {
     int state = GetToken();
+    exprstack.push_back(state);
+    
     switch(state)
     {
         case decl:
         {
-            exprstack.push_back(ParseDecl());
+            //exprstack.push_back(ParseDecl());
+            
         }
         break;
 
 
         case fnum:
         {
-            exprstack.push_back(ParseDouble());
+            //exprstack.push_back(ParseDouble());
         }
         break;
     }
+    return state;
 }
 
 int main(int argc, char* argv[])
 {
-
+    fi = fopen("test.vtex", "r");
+    if (fi == NULL)
+    {
+        return -1;
+    }
+    while(true)
+    {
+        if (ParseToplevel() < 0)
+        {
+            break;
+        }
+    }
+    for (const auto& token : exprstack)
+    {
+        printf("Expr tokens: %i\n", token);
+    }
+    fclose(fi);
     return 0;
 }

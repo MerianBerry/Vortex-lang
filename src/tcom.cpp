@@ -11,7 +11,6 @@
 #include <chrono>
 namespace c = std::chrono;
 
-
 struct valNODE
 {
     char* val;
@@ -35,7 +34,7 @@ struct typeNODE
 
 struct varNODE
 {
-    char* name;
+    char* name = NULL;
     typeNODE value;
     varNODE() {}
     ~varNODE() {}
@@ -55,7 +54,7 @@ struct vwriteNODE
 
 struct NODE
 {
-    enum {DECL, TYPE, VAR, VWRITE, VAL} enums;
+    enum {DECL, TYPE, VAR, VWRITE, VAL, FULLDECL} enums;
     uint32_t type;
     union
     {
@@ -79,7 +78,7 @@ std::unordered_map<std::string, uint32_t> usrtypes(stdtypes.begin(), stdtypes.en
 
 std::deque<NODE> NodeExpressions;
 std::deque<varNODE> ReadStack;
-std::deque<uint32_t> ReadStackNeeded;
+std::deque<uint32_t> VariableOperations;
 
 static FILE* fi = nullptr;
 
@@ -100,12 +99,35 @@ static int parse()
     if (lastchar == '=')
     {
         lastchar = getc(fi);
+        VariableOperations.push_front(NODE::VWRITE);
         return NODE::VWRITE;
     }
     if (lastchar == '$')
     {
         //lastchar = getc(fi);
         //return vread;
+    }
+    if (lastchar == '\"')
+    {
+        identstr = "";
+        lastchar = getc(fi);
+        do
+        {
+            identstr += lastchar;
+            lastchar = getc(fi);
+        } while(lastchar != '\"');
+        if (VariableOperations.size() != 0 && VariableOperations.at(0) == NODE::VWRITE)
+        {
+            valNODE vanode;
+            vanode.setval(identstr.c_str());
+            NODE vaNODE;
+            vaNODE.type = NODE::VAL;
+            vaNODE.vanode = vanode;
+            NodeExpressions.push_back(vaNODE);
+            VariableOperations.erase(VariableOperations.begin());
+            lastchar = getc(fi);
+            return NODE::VAL;
+        }
     }
 
     if (isalpha(lastchar))
@@ -115,8 +137,7 @@ static int parse()
         {
             identstr += (char)lastchar;
         } while (isalnum((lastchar = getc(fi))));
-        
-        lastchar = getc(fi);
+
         {
             if (identstr == "new")
             {
@@ -125,6 +146,7 @@ static int parse()
                 dNODE.type = NODE::DECL;
                 dNODE.dnode = dnode;
                 NodeExpressions.push_back(dNODE);
+                VariableOperations.push_front(NODE::DECL);
                 return NODE::DECL;
             }
         }
@@ -140,21 +162,42 @@ static int parse()
                 NODE tNODE;
                 tNODE.type = NODE::TYPE;
                 tNODE.tnode = tnode;
-                NodeExpressions.push_back(tNODE);
+                if (VariableOperations.size() != 0 && VariableOperations[0] == NODE::DECL)
+                {
+                    NodeExpressions.push_back(tNODE);
+                    VariableOperations.erase(VariableOperations.begin());
+                    VariableOperations.push_front(NODE::FULLDECL);
+                }
                 ret = NODE::TYPE;
+            } else
+            {
+                if (VariableOperations.size() != 0 && VariableOperations[0] == NODE::DECL)
+                {
+                    VariableOperations.erase(VariableOperations.begin());
+                }
             }
             if (ret != 0)
                 return ret;
         }
-        varNODE vnode;
-        vnode.value = NodeExpressions[0].tnode;
-        vnode.name = (char*)calloc(identstr.size(), 1);
-        strcpy(vnode.name, identstr.c_str());
-        NODE vNODE;
-        vNODE.type = NODE::VAR;
-        vNODE.vnode = vnode;
-        NodeExpressions.push_back(vNODE);
-        return NODE::VAR;
+        
+        if (VariableOperations.size() != 0)
+        switch(VariableOperations.at(0))
+        {
+            case NODE::FULLDECL:
+            {
+                varNODE vnode;
+                vnode.value = NodeExpressions[0].tnode;
+                vnode.name = (char*)calloc(identstr.size(), 1);
+                strcpy(vnode.name, identstr.c_str());
+                NODE vNODE;
+                vNODE.type = NODE::VAR;
+                vNODE.vnode = vnode;
+                NodeExpressions.push_back(vNODE);
+                VariableOperations.erase(VariableOperations.begin());
+                return NODE::VAR;
+            }
+            break;
+        }
     }
 
     if (isdigit(lastchar) || lastchar == '.')
@@ -164,14 +207,24 @@ static int parse()
         {
             identnum += (char)lastchar;
         } while(isdigit((lastchar = getc(fi))) || lastchar == '.');
-        valNODE vanode;
-        vanode.setval(identnum.c_str());
-        NODE vaNODE;
-        vaNODE.type = NODE::VAL;
-        vaNODE.vanode = vanode;
-        NodeExpressions.push_back(vaNODE);
-        lastchar = getc(fi);
-        return NODE::VAL;
+        if (VariableOperations.size() != 0)
+        switch(VariableOperations.at(0))
+        {
+            case NODE::VWRITE:
+            {
+                valNODE vanode;
+                vanode.setval(identnum.c_str());
+                NODE vaNODE;
+                vaNODE.type = NODE::VAL;
+                vaNODE.vanode = vanode;
+                NodeExpressions.push_back(vaNODE);
+                VariableOperations.erase(VariableOperations.begin());
+                lastchar = getc(fi);
+                return NODE::VAL;
+            }
+            break;
+            
+        }
     }
     if (lastchar == EOF)
     {
@@ -183,7 +236,7 @@ static int parse()
 
 int main(int argc, char* argv[])
 {
-    fi = fopen("test.vtex", "r");
+    fi = fopen("script.vtex", "r");
     if (fi == NULL)
     {
         return -1;
@@ -205,7 +258,6 @@ int main(int argc, char* argv[])
             {
                 printf("Declaration expression\n");
                 ReadStack.push_back({});
-                //ReadStackNeeded.push_back(1);
             }
             break;
 
@@ -232,15 +284,17 @@ int main(int argc, char* argv[])
                 {
                     case typeNODE::NUMBER:
                     {
-                        printf("Set latest readstack variable \"%s\", to float: %s\n", ptr->name, node.val);
+                        if (ptr->name != NULL)
+                            printf("Set latest readstack variable \"%s\", to float: %s\n", ptr->name, node.val);
                         ptr->value.setnumber(node.val);
                         ReadStack.erase(ReadStack.end()-1);
+                        VariableOperations.clear();
                     }
                     break;
 
                     case typeNODE::STRING:
                     {
-                        printf("Set latest readstack variable to string: %s\n", node.val);
+                        printf("Set latest readstack variable to string: \"%s\"\n", node.val);
                         ptr->value.setstr(node.val);
                         ReadStack.erase(ReadStack.end()-1);
                     }

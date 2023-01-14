@@ -8,4 +8,4 @@ project("Vortex")
 
 add_executable(Vtest "src/tcom.cpp")
 set_target_properties(Vtest PROPERTIES
-    CXX_STANDARD_REQUIRED 17)
+    CXX_STANDARD 17)

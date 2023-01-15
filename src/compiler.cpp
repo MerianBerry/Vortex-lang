@@ -81,6 +81,55 @@ const std::deque<std::pair<const char*, const char*(*)(const char*, const char*)
     }}
 };
 
+const std::deque<std::pair<const char*, const char*(*)(const char*, const char*)>> strops =
+{
+    {"+", [](const char* lhs, const char* rhs) -> const char*
+    {
+        char* nstr = (char*)calloc(strlen(lhs) + strlen(rhs), 1);
+        strcpy(nstr, lhs);
+        strcpy(&nstr[strlen(lhs)], rhs);
+        return nstr;
+    }}
+};
+
+struct stringNODE
+{
+    char* val = nullptr;
+    bool inited = false;
+    void constructor(const char* _val)
+    {
+        if (inited)
+        {
+            free(val);
+            val = nullptr;
+        }
+            
+        val = (char*)calloc(strlen(_val), 1);
+        strcpy(val, _val);
+        inited = true;
+    }
+    int getoperator(const char* op)
+    {
+        for (size_t i = 0; i < strops.size(); ++i)
+        {
+            if (strcmp(op, strops[i].first) == 0)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+    stringNODE() {}
+    ~stringNODE()
+    {
+        if (inited)
+        {
+            free(val);
+            val = nullptr;
+        }
+    }
+};
+
 struct numberNODE
 {
     long double val = 0.0;
@@ -119,10 +168,10 @@ struct typeNODE
     union
     {
         numberNODE number;
-        char* str;
+        stringNODE str;
     };
     void setnumber(const char* val) {number.constructor(val);}
-    void setstr(const char* val) {str = const_cast<char*>(val);}
+    void setstr(const char* val) {str.constructor(val);}
     typeNODE() {}
     ~typeNODE() {}
 };
@@ -377,15 +426,15 @@ static int parse()
                 lastchar = getc(fi);
                 do
                 {
-                    identstr += lastchar;
-                    lastchar = getc(fi);
-                } while(lastchar != '\"' && lastchar != EOF);
+                    identstr += (char)lastchar;
+                } while ((lastchar = getc(fi)) != '\"' && lastchar != EOF);
+                printf("AAA %s\n", identstr.c_str());
                 if (lastchar == EOF)
                 {
                     printf("ERROR: String literal extends to EOF\n");
                     return EOF;
                 }
-                if (lastchar != EOF && VariableOperations.size() != 0 && VariableOperations.at(0) == NODE::VWRITE)
+                if (lastchar != EOF && VariableOperations.size() != 0 && (VariableOperations.at(0) == NODE::VWRITE || VariableOperations[0] == NODE::OP))
                 {
                     valNODE vanode;
                     vanode.setval(identstr.c_str());
@@ -398,6 +447,7 @@ static int parse()
                     #if !defined(NPRINT)
                     printf("String literal: \"%s\"\n", identstr.c_str());
                     #endif
+                    laststate = NODE::VAL;
                     return NODE::VAL;
                 }
             }
@@ -684,15 +734,13 @@ void CompileNodeExpressions()
                         printf("ERROR: Variable name \"%s\" does not exist", node.name);
                     } else
                     {
-                        std::string lhsstr = std::to_string(ptr->value.number.val);
-                        std::string varstr = std::to_string(itr->second.value.number.val);
-                        printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
-                        //printf("Readstack variable \"%s\" has value of \"%s\"\n", ptr->name, lhsstr.c_str());
-
                         switch(ptr->value.type)
                         {
                             case typeNODE::NUMBER:
                             {
+                                std::string lhsstr = std::to_string(ptr->value.number.val);
+                                std::string varstr = std::to_string(itr->second.value.number.val);
+                                printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
                                 if (!setop.valid)
                                 {
                                     ptr->value.setnumber(varstr.c_str());
@@ -705,21 +753,46 @@ void CompileNodeExpressions()
                                 {
                                     if (strcmp(lhsstr.c_str(), "nan") == 0 || strcmp(lhsstr.c_str(), "-nan") == 0)
                                         lhsstr = "0.0";
-                                    
-                                    ptr->value.setnumber(setop.pfn(lhsstr.c_str(), varstr.c_str()));
+                                    auto ret = setop.pfn(lhsstr.c_str(), varstr.c_str());
+                                    ptr->value.setnumber(ret);
                                     #if !defined(NPRINT)
                                     if (ptr->name != NULL)
                                         printf("Set latest readstack variable \"%s\", to float: %.2Lf using an operator\n", ptr->name, ptr->value.number.val);
                                     #endif
                                     ReadStack.pop_front();
                                     setop = {};
+                                    free((void*)ret);
                                 }
                             }
                             break;
 
                             case typeNODE::STRING:
                             {
-
+                                std::string lhsstr = ptr->value.str.val;
+                                std::string varstr = itr->second.value.str.val;
+                                printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
+                                if (!setop.valid)
+                                {
+                                    ptr->value.setstr(varstr.c_str());
+                                    #if !defined(NPRINT)
+                                    if (ptr->name != NULL)
+                                        printf("Set latest readstack variable \"%s\", to string: \"%s\"\n", ptr->name, ptr->value.str.val);
+                                    #endif
+                                    ReadStack.pop_front();
+                                } else
+                                {
+                                    if (ptr->value.str.val == NULL)
+                                        ptr->value.setstr("");
+                                    auto ret = setop.pfn(ptr->value.str.val, varstr.c_str());
+                                    ptr->value.setstr(ret);
+                                    #if !defined(NPRINT)
+                                    if (ptr->name != NULL)
+                                        printf("Set latest readstack variable \"%s\", to string: \"%s\" using an operator\n", ptr->name, ptr->value.str.val);
+                                    #endif
+                                    ReadStack.pop_front();
+                                    setop = {};
+                                    free((void*)ret);
+                                }
                             }
                             break;
                         }
@@ -756,7 +829,15 @@ void CompileNodeExpressions()
 
                         case typeNODE::STRING:
                         {
-
+                            auto _itr = itr->second.value.str.getoperator(NodeExpressions[i].opnode.op);
+                            if (_itr != -1)
+                            {
+                                NodeExpressions[i].opnode.pfn = strops[_itr].second;
+                                NodeExpressions[i].opnode.valid = true;
+                            } else
+                            {
+                                printf("ERROR: Invalid float operator\n");
+                            }
                         }
                         break;
                     };
@@ -794,13 +875,15 @@ void CompileNodeExpressions()
                             } else
                             {
                                 std::string lhsstr = std::to_string(ptr->value.number.val);
-                                ptr->value.setnumber(setop.pfn(lhsstr.c_str(), node.val));
+                                auto ret = setop.pfn(lhsstr.c_str(), node.val);
+                                ptr->value.setnumber(ret);
                                 #if !defined(NPRINT)
                                 if (ptr->name != NULL)
                                     printf("Set latest readstack variable \"%s\", to float: %.2Lf using an operator\n", ptr->name, ptr->value.number.val);
                                 #endif
                                 ReadStack.pop_front();
                                 setop = {};
+                                free((void*)ret);
                             }
                             
                         }
@@ -808,12 +891,26 @@ void CompileNodeExpressions()
 
                         case typeNODE::STRING:
                         {
-                            ptr->value.setstr(node.val);
-                            #if !defined(NPRINT)
-                            if (ptr->name != NULL)
-                                printf("Set latest readstack variable \"%s\", to string: \"%s\"\n", ptr->name, ptr->value.str);
-                            #endif
-                            ReadStack.pop_front();
+                            if (!setop.valid)
+                            {
+                                ptr->value.setstr(node.val);
+                                #if !defined(NPRINT)
+                                if (ptr->name != NULL)
+                                    printf("Set latest readstack variable \"%s\", to string: \"%s\"\n", ptr->name, ptr->value.str.val);
+                                #endif
+                                ReadStack.pop_front();
+                            } else
+                            {
+                                auto ret = setop.pfn(ptr->value.str.val, node.val);
+                                ptr->value.setstr(ret);
+                                #if !defined(NPRINT)
+                                if (ptr->name != NULL)
+                                    printf("Set latest readstack variable \"%s\", to string: \"%s\" using an operator\n", ptr->name, ptr->value.str.val);
+                                #endif
+                                ReadStack.pop_front();
+                                setop = {};
+                                free((void*)ret);
+                            }
                         }
                         break;
                     }

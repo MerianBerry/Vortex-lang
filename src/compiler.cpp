@@ -404,7 +404,9 @@ static int parse()
                     node.opnode = onode;
                     NodeExpressions.push_back(node);
                     VariableOperations.push_front(NODE::OP);
+                    #if !defined(NPRINT)
                     printf("Added \"%s\" operation\n", identstr.c_str());
+                    #endif
                     laststate = -1;
                 }
                 break;
@@ -428,7 +430,6 @@ static int parse()
                 {
                     identstr += (char)lastchar;
                 } while ((lastchar = getc(fi)) != '\"' && lastchar != EOF);
-                printf("AAA %s\n", identstr.c_str());
                 if (lastchar == EOF)
                 {
                     printf("ERROR: String literal extends to EOF\n");
@@ -740,7 +741,9 @@ void CompileNodeExpressions()
                             {
                                 std::string lhsstr = std::to_string(ptr->value.number.val);
                                 std::string varstr = std::to_string(itr->second.value.number.val);
+                                #if !defined(NPRINT)
                                 printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
+                                #endif
                                 if (!setop.valid)
                                 {
                                     ptr->value.setnumber(varstr.c_str());
@@ -770,7 +773,9 @@ void CompileNodeExpressions()
                             {
                                 std::string lhsstr = ptr->value.str.val;
                                 std::string varstr = itr->second.value.str.val;
+                                #if !defined(NPRINT)
                                 printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
+                                #endif
                                 if (!setop.valid)
                                 {
                                     ptr->value.setstr(varstr.c_str());

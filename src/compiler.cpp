@@ -312,7 +312,7 @@ static int ParseNonSpace()
         } while(!isspace((lastchar = getc(fi))) && lastchar != EOF);
     }
     #if !defined(NPRINT)
-    printf("%s : %i\n", identstr.c_str(), type);
+    //printf("%s : %i\n", identstr.c_str(), type);
     #endif
     laststate = type;
     return type;
@@ -935,7 +935,9 @@ int main(int argc, char* argv[])
         printf("Script wasnt found. Make a file named \"script.vtex\" in the build directory\n");
         return -1;
     }
+
     auto strt = c::high_resolution_clock::now();
+
     while(true)
     {
         if (parse() < 0)
@@ -948,7 +950,7 @@ int main(int argc, char* argv[])
     CompileNodeExpressions();
 
     auto end = c::high_resolution_clock::now();
-    printf("Time: %.2lfus\n", c::duration<float, c::microseconds::period>(end - strt).count());
+    printf("Time: %.2lfμs\n", c::duration<float, c::microseconds::period>(end - strt).count());
     fclose(fi);
     return 0;
 }

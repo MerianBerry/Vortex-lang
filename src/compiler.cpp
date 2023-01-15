@@ -189,7 +189,7 @@ static int ParseNonSpace()
                 #endif
                 break;
             }
-            if (type == PNUM && !(isdigit(lastchar) || lastchar == '.') || (lastchar == '-' && (type == PNUM)))
+            if ((type == PNUM && !(isdigit(lastchar) || lastchar == '.')) || (lastchar == '-' && type == PNUM))
             {
                 #if !defined(NPRINT)
                 //printf("Cuttoff of digit word\n");
@@ -207,10 +207,8 @@ static int ParseNonSpace()
             identstr += (char)lastchar;
         } while(!isspace((lastchar = getc(fi))) && lastchar != EOF);
     }
-    if (lastchar == EOF)
-        type = -1;
     #if !defined(NPRINT)
-    //printf("%s : %i\n", identstr.c_str(), type);
+    printf("%s : %i\n", identstr.c_str(), type);
     #endif
     laststate = type;
     return type;

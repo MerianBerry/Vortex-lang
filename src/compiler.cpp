@@ -218,9 +218,6 @@ static int ParseNonSpace()
 
 static int parse()
 {
-    
-    //static int lastchar = 0;
-    static int laststate = 0;
     //-- NEW WHITESPACE BASED PARSING SYSTEM --//
     switch(ParseNonSpace())
     {

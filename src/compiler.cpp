@@ -92,6 +92,11 @@ const std::deque<std::pair<const char*, const char*(*)(const char*, const char*)
     }}
 };
 
+const std::deque<const char*> opnames =
+{
+    "+", "-", "*", "/"  
+};
+
 struct stringNODE
 {
     char* val = nullptr;
@@ -152,6 +157,11 @@ struct numberNODE
     ~numberNODE() {}
 };
 
+struct functionNODE
+{
+
+};
+
 struct operatorNODE
 {
     char* op = NULL;
@@ -163,7 +173,7 @@ struct operatorNODE
 
 struct typeNODE
 {
-    enum {NUMBER, STRING} enums;
+    enum {NUMBER, STRING, FUNCTION} enums;
     uint32_t type;
     union
     {
@@ -176,8 +186,15 @@ struct typeNODE
     ~typeNODE() {}
 };
 
+struct arrayNODE
+{
+
+};
+
 struct varNODE
 {
+    enum {NORMAL, ARRAY} enums;
+    uint32_t type = NORMAL;
     char* name = NULL;
     typeNODE value;
     varNODE() {}
@@ -312,7 +329,7 @@ static int ParseNonSpace()
         } while(!isspace((lastchar = getc(fi))) && lastchar != EOF);
     }
     #if !defined(NPRINT)
-    //printf("%s : %i\n", identstr.c_str(), type);
+    printf("%s : %i\n", identstr.c_str(), type);
     #endif
     laststate = type;
     return type;
@@ -373,26 +390,9 @@ static int parse()
 
         case PNEGATIVEWORD:
         {
-            operatorNODE onode;
-            //onode.pfn = numops[ind].second;
-            onode.op = (char*)calloc(strlen(identstr.c_str()), 1);
-            strcpy(onode.op, identstr.c_str());
-            //onode.valid = true;
-            NODE node;
-            node.type = NODE::OP;
-            node.opnode = onode;
-            NodeExpressions.push_back(node);
-            VariableOperations.push_front(NODE::OP);
-            printf("Added \"%s\" operation\n", identstr.c_str());
-            laststate = -1;
-        }
-        break;
-
-        case POTHER:
-        {
-            switch(laststate)
+            for (const auto& name : opnames)
             {
-                case NODE::VAL:
+                if (strcmp(name, identstr.c_str()) == 0)
                 {
                     operatorNODE onode;
                     //onode.pfn = numops[ind].second;
@@ -404,10 +404,37 @@ static int parse()
                     node.opnode = onode;
                     NodeExpressions.push_back(node);
                     VariableOperations.push_front(NODE::OP);
-                    #if !defined(NPRINT)
                     printf("Added \"%s\" operation\n", identstr.c_str());
-                    #endif
                     laststate = -1;
+                }
+            }
+        }
+        break;
+
+        case POTHER:
+        {
+            switch(laststate)
+            {
+                case NODE::VAL:
+                {
+                    for (const auto& name : opnames)
+                    {
+                        if (strcmp(name, identstr.c_str()) == 0)
+                        {
+                            operatorNODE onode;
+                            //onode.pfn = numops[ind].second;
+                            onode.op = (char*)calloc(strlen(identstr.c_str()), 1);
+                            strcpy(onode.op, identstr.c_str());
+                            //onode.valid = true;
+                            NODE node;
+                            node.type = NODE::OP;
+                            node.opnode = onode;
+                            NodeExpressions.push_back(node);
+                            VariableOperations.push_front(NODE::OP);
+                            printf("Added \"%s\" operation\n", identstr.c_str());
+                            laststate = -1;
+                        }
+                    }
                 }
                 break;
             }
@@ -420,6 +447,15 @@ static int parse()
                 NodeExpressions.push_back(vwnode);
                 VariableOperations.push_front(NODE::VWRITE);
                 return NODE::VWRITE;
+            }
+            //-- ARRAY SPECIFIER --//
+            if (strcmp(identstr.c_str(), "{") == 0)
+            {
+                printf("STATUS: Start array specifier\n");
+            }
+            if (strcmp(identstr.c_str(), "}") == 0)
+            {
+                printf("STATUS: End array specifier\n");
             }
             //-- STRING LITERALLS --//
             if (strcmp(identstr.c_str(), "\"") == 0)
@@ -463,7 +499,7 @@ static int parse()
             }
             laststate = PWORD;
             //-- KEYWORD SEARCH --//
-            if (identstr == "new")
+            if (strcmp(identstr.c_str(), "new") == 0)
             {
                 declNODE dnode;
                 NODE dNODE;
@@ -473,13 +509,33 @@ static int parse()
                 VariableOperations.push_front(NODE::DECL);
                 return NODE::DECL;
             }
-            if (identstr == "set")
+            if (strcmp(identstr.c_str(), "set") == 0)
             {
                 NODE snode;
                 snode.type = NODE::VSET;
                 NodeExpressions.push_back(snode);
                 VariableOperations.push_front(NODE::VSET);
                 return NODE::VSET;
+            }
+            if (strcmp(identstr.c_str(), "return") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "end") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "if") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "else") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "elseif") == 0)
+            {
+
             }
             //-- TYPENAME SEARCH --//
             {

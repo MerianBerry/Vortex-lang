@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 // CXX HEADINGS
 #include <string>
 #include <unordered_map>
@@ -26,7 +27,8 @@ enum
     PSTRING,
     POTHER,
     PCOMMENT,
-    PRCOMMENT
+    PRCOMMENT,
+    PNEGATIVEWORD
 };
 
 struct valNODE
@@ -35,7 +37,7 @@ struct valNODE
     void setval(const char* _val) {val = (char*)calloc(strlen(_val), 1); strcpy(val, _val);}
 };
 
-const std::deque<std::pair<const char*, std::function<const char*(const char*, const char*)>>> numops =
+const std::deque<std::pair<const char*, const char*(*)(const char*, const char*)>> numops =
 {
     {"+", [](const char* lhs, const char* rhs) -> const char*
     {
@@ -44,11 +46,98 @@ const std::deque<std::pair<const char*, std::function<const char*(const char*, c
         char* nstr = (char*)calloc(str.size(), 1);
         strcpy(nstr, str.c_str());
         return nstr;
+    }},
+    {"-", [](const char* lhs, const char* rhs) -> const char*
+    {
+        long double ret = strtold(lhs, nullptr) - strtold(rhs, nullptr);
+        auto str = std::to_string(ret);
+        char* nstr = (char*)calloc(str.size(), 1);
+        strcpy(nstr, str.c_str());
+        return nstr;
+    }},
+    {"*", [](const char* lhs, const char* rhs) -> const char*
+    {
+        long double ret = strtold(lhs, nullptr) * strtold(rhs, nullptr);
+        auto str = std::to_string(ret);
+        char* nstr = (char*)calloc(str.size(), 1);
+        strcpy(nstr, str.c_str());
+        return nstr;
+    }},
+    {"/", [](const char* lhs, const char* rhs) -> const char*
+    {
+        long double ret = strtold(lhs, nullptr) / strtold(rhs, nullptr);
+        auto str = std::to_string(ret);
+        char* nstr = (char*)calloc(str.size(), 1);
+        strcpy(nstr, str.c_str());
+        return nstr;
+    }},
+    {"^", [](const char* lhs, const char* rhs) -> const char*
+    {
+        long double ret = powf64x(strtold(lhs, nullptr), strtold(rhs, nullptr));
+        auto str = std::to_string(ret);
+        char* nstr = (char*)calloc(str.size(), 1);
+        strcpy(nstr, str.c_str());
+        return nstr;
     }}
 };
+
+const std::deque<std::pair<const char*, const char*(*)(const char*, const char*)>> strops =
+{
+    {"+", [](const char* lhs, const char* rhs) -> const char*
+    {
+        char* nstr = (char*)calloc(strlen(lhs) + strlen(rhs), 1);
+        strcpy(nstr, lhs);
+        strcpy(&nstr[strlen(lhs)], rhs);
+        return nstr;
+    }}
+};
+
+const std::deque<const char*> opnames =
+{
+    "+", "-", "*", "/"  
+};
+
+struct stringNODE
+{
+    char* val = nullptr;
+    bool inited = false;
+    void constructor(const char* _val)
+    {
+        if (inited)
+        {
+            free(val);
+            val = nullptr;
+        }
+            
+        val = (char*)calloc(strlen(_val), 1);
+        strcpy(val, _val);
+        inited = true;
+    }
+    int getoperator(const char* op)
+    {
+        for (size_t i = 0; i < strops.size(); ++i)
+        {
+            if (strcmp(op, strops[i].first) == 0)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+    stringNODE() {}
+    ~stringNODE()
+    {
+        if (inited)
+        {
+            free(val);
+            val = nullptr;
+        }
+    }
+};
+
 struct numberNODE
 {
-    long double val;
+    long double val = 0.0;
     void constructor(const char* _val)
     {
         val = strtold(_val, nullptr);
@@ -57,7 +146,7 @@ struct numberNODE
     {
         for (size_t i = 0; i < numops.size(); ++i)
         {
-            if (strcmp(op, numops[i].first))
+            if (strcmp(op, numops[i].first) == 0)
             {
                 return i;
             }
@@ -68,23 +157,44 @@ struct numberNODE
     ~numberNODE() {}
 };
 
+struct functionNODE
+{
+
+};
+
+struct operatorNODE
+{
+    char* op = NULL;
+    const char*(*pfn)(const char*, const char*);
+    bool valid = false;
+    operatorNODE() {}
+    ~operatorNODE() {}
+};
+
 struct typeNODE
 {
-    enum {NUMBER, STRING} enums;
+    enum {NUMBER, STRING, FUNCTION} enums;
     uint32_t type;
     union
     {
         numberNODE number;
-        char* str;
+        stringNODE str;
     };
     void setnumber(const char* val) {number.constructor(val);}
-    void setstr(const char* val) {str = const_cast<char*>(val);}
+    void setstr(const char* val) {str.constructor(val);}
     typeNODE() {}
     ~typeNODE() {}
 };
 
+struct arrayNODE
+{
+
+};
+
 struct varNODE
 {
+    enum {NORMAL, ARRAY} enums;
+    uint32_t type = NORMAL;
     char* name = NULL;
     typeNODE value;
     varNODE() {}
@@ -106,7 +216,7 @@ struct vwriteNODE
 
 struct NODE
 {
-    enum {DECL, TYPE, VAR, VARDECL, VWRITE, VSET, READ, FULLREAD, WRITE, FULLWRITE, VAL, FULLDECL} enums;
+    enum {DECL, TYPE, VAR, VARDECL, VWRITE, VSET, VREAD, FULLREAD, WRITE, FULLWRITE, VAL, OP, FULLDECL} enums;
     uint32_t type;
     union
     {
@@ -115,6 +225,7 @@ struct NODE
         declNODE dnode;
         vwriteNODE vwnode;
         valNODE vanode;
+        operatorNODE opnode;
     };
     NODE() {}
     ~NODE() {};
@@ -155,9 +266,11 @@ static int ParseNonSpace()
 
     if (lastchar != EOF)
     {
+        bool usingnegative = false;
         do
         {
-            
+            if (lastchar == '-')
+                usingnegative = true;
             if (type == -1 && isalpha(lastchar))
                 type = PWORD;
             else if (type == -1 && (isdigit(lastchar) || lastchar == '.' || (lastchar == '-' && laststate != PNUM)))
@@ -189,7 +302,15 @@ static int ParseNonSpace()
                 #endif
                 break;
             }
-            if (type == PNUM && !(isdigit(lastchar) || lastchar == '.') || (lastchar == '-' && (type == PNUM)))
+            if (type == PNUM && usingnegative&& isalpha(lastchar))
+            {
+                type = PNEGATIVEWORD;
+                #if !defined(NPRINT)
+                //printf("Special cuttof of negitive sign for alphanumeric character\n");
+                #endif
+                break;
+            }
+            if ((type == PNUM && !(isdigit(lastchar) || lastchar == '.')) || (lastchar == '-' && type == PNUM))
             {
                 #if !defined(NPRINT)
                 //printf("Cuttoff of digit word\n");
@@ -207,10 +328,8 @@ static int ParseNonSpace()
             identstr += (char)lastchar;
         } while(!isspace((lastchar = getc(fi))) && lastchar != EOF);
     }
-    if (lastchar == EOF)
-        type = -1;
     #if !defined(NPRINT)
-    //printf("%s : %i\n", identstr.c_str(), type);
+    printf("%s : %i\n", identstr.c_str(), type);
     #endif
     laststate = type;
     return type;
@@ -218,6 +337,7 @@ static int ParseNonSpace()
 
 static int parse()
 {
+    static int laststate = -1;
     //-- NEW WHITESPACE BASED PARSING SYSTEM --//
     switch(ParseNonSpace())
     {
@@ -268,8 +388,57 @@ static int parse()
         }
         break;
 
+        case PNEGATIVEWORD:
+        {
+            for (const auto& name : opnames)
+            {
+                if (strcmp(name, identstr.c_str()) == 0)
+                {
+                    operatorNODE onode;
+                    //onode.pfn = numops[ind].second;
+                    onode.op = (char*)calloc(strlen(identstr.c_str()), 1);
+                    strcpy(onode.op, identstr.c_str());
+                    //onode.valid = true;
+                    NODE node;
+                    node.type = NODE::OP;
+                    node.opnode = onode;
+                    NodeExpressions.push_back(node);
+                    VariableOperations.push_front(NODE::OP);
+                    printf("Added \"%s\" operation\n", identstr.c_str());
+                    laststate = -1;
+                }
+            }
+        }
+        break;
+
         case POTHER:
         {
+            switch(laststate)
+            {
+                case NODE::VAL:
+                {
+                    for (const auto& name : opnames)
+                    {
+                        if (strcmp(name, identstr.c_str()) == 0)
+                        {
+                            operatorNODE onode;
+                            //onode.pfn = numops[ind].second;
+                            onode.op = (char*)calloc(strlen(identstr.c_str()), 1);
+                            strcpy(onode.op, identstr.c_str());
+                            //onode.valid = true;
+                            NODE node;
+                            node.type = NODE::OP;
+                            node.opnode = onode;
+                            NodeExpressions.push_back(node);
+                            VariableOperations.push_front(NODE::OP);
+                            printf("Added \"%s\" operation\n", identstr.c_str());
+                            laststate = -1;
+                        }
+                    }
+                }
+                break;
+            }
+            laststate = POTHER;
             if (strcmp(identstr.c_str(), "=") == 0)
             {
                 NODE vwnode;
@@ -279,6 +448,15 @@ static int parse()
                 VariableOperations.push_front(NODE::VWRITE);
                 return NODE::VWRITE;
             }
+            //-- ARRAY SPECIFIER --//
+            if (strcmp(identstr.c_str(), "{") == 0)
+            {
+                printf("STATUS: Start array specifier\n");
+            }
+            if (strcmp(identstr.c_str(), "}") == 0)
+            {
+                printf("STATUS: End array specifier\n");
+            }
             //-- STRING LITERALLS --//
             if (strcmp(identstr.c_str(), "\"") == 0)
             {
@@ -286,15 +464,14 @@ static int parse()
                 lastchar = getc(fi);
                 do
                 {
-                    identstr += lastchar;
-                    lastchar = getc(fi);
-                } while(lastchar != '\"' && lastchar != EOF);
+                    identstr += (char)lastchar;
+                } while ((lastchar = getc(fi)) != '\"' && lastchar != EOF);
                 if (lastchar == EOF)
                 {
                     printf("ERROR: String literal extends to EOF\n");
                     return EOF;
                 }
-                if (lastchar != EOF && VariableOperations.size() != 0 && VariableOperations.at(0) == NODE::VWRITE)
+                if (lastchar != EOF && VariableOperations.size() != 0 && (VariableOperations.at(0) == NODE::VWRITE || VariableOperations[0] == NODE::OP))
                 {
                     valNODE vanode;
                     vanode.setval(identstr.c_str());
@@ -307,6 +484,7 @@ static int parse()
                     #if !defined(NPRINT)
                     printf("String literal: \"%s\"\n", identstr.c_str());
                     #endif
+                    laststate = NODE::VAL;
                     return NODE::VAL;
                 }
             }
@@ -315,8 +493,13 @@ static int parse()
 
         case PWORD:
         {
+            if (VariableOperations.size() != 0 && VariableOperations[0] == NODE::VWRITE)
+            {
+                VariableOperations.pop_front();
+            }
+            laststate = PWORD;
             //-- KEYWORD SEARCH --//
-            if (identstr == "new")
+            if (strcmp(identstr.c_str(), "new") == 0)
             {
                 declNODE dnode;
                 NODE dNODE;
@@ -326,13 +509,33 @@ static int parse()
                 VariableOperations.push_front(NODE::DECL);
                 return NODE::DECL;
             }
-            if (identstr == "set")
+            if (strcmp(identstr.c_str(), "set") == 0)
             {
                 NODE snode;
                 snode.type = NODE::VSET;
                 NodeExpressions.push_back(snode);
                 VariableOperations.push_front(NODE::VSET);
                 return NODE::VSET;
+            }
+            if (strcmp(identstr.c_str(), "return") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "end") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "if") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "else") == 0)
+            {
+
+            }
+            if (strcmp(identstr.c_str(), "elseif") == 0)
+            {
+
             }
             //-- TYPENAME SEARCH --//
             {
@@ -369,40 +572,57 @@ static int parse()
             }
             //-- VARIABLE STUFF --//
             if (VariableOperations.size() != 0)
-            switch(VariableOperations.at(0))
             {
-                case NODE::VSET:
+                //printf("Operation: %i\n", VariableOperations.at(0));
+                switch(VariableOperations.at(0))
                 {
-                    varNODE vnode;
-                    vnode.name = (char*)calloc(identstr.size(), 1);
-                    strcpy(vnode.name, identstr.c_str());
-                    NODE vNODE;
-                    vNODE.type = NODE::VAR;
-                    vNODE.vnode = vnode;
-                    NodeExpressions.push_back(vNODE);
-                    VariableOperations.pop_front();
-                    return NODE::VAR;
-                }
-                break;
-                case NODE::FULLDECL:
-                {
-                    if (usrvars.find(identstr) == usrvars.end())
+                    case NODE::VSET:
                     {
                         varNODE vnode;
                         vnode.name = (char*)calloc(identstr.size(), 1);
                         strcpy(vnode.name, identstr.c_str());
                         NODE vNODE;
-                        vNODE.type = NODE::VARDECL;
+                        vNODE.type = NODE::VAR;
                         vNODE.vnode = vnode;
                         NodeExpressions.push_back(vNODE);
                         VariableOperations.pop_front();
-                        return NODE::VARDECL;
+                        return NODE::VAR;
                     }
-                    printf("ERROR: invalid variable exception\n");
-                    return INVAR;
+                    break;
+                    case NODE::FULLDECL:
+                    {
+                        if (usrvars.find(identstr) == usrvars.end())
+                        {
+                            varNODE vnode;
+                            vnode.name = (char*)calloc(identstr.size(), 1);
+                            strcpy(vnode.name, identstr.c_str());
+                            NODE vNODE;
+                            vNODE.type = NODE::VARDECL;
+                            vNODE.vnode = vnode;
+                            NodeExpressions.push_back(vNODE);
+                            VariableOperations.pop_front();
+                            return NODE::VARDECL;
+                        }
+                        printf("ERROR: invalid variable exception\n");
+                        return INVAR;
+                    }
+                    break;
+                    default:
+                    {
+                        
+                    }
+                    break;
                 }
-                break;
             }
+            varNODE vnode;
+            vnode.name = (char*)calloc(identstr.size(), 1);
+            strcpy(vnode.name, identstr.c_str());
+            NODE vNODE;
+            vNODE.type = NODE::VREAD;
+            vNODE.vnode = vnode;
+            NodeExpressions.push_back(vNODE);
+            laststate = NODE::VAL;
+            return NODE::VREAD;
         }
         break;
 
@@ -411,6 +631,19 @@ static int parse()
             if (VariableOperations.size() != 0)
             switch(VariableOperations.at(0))
             {
+                case NODE::OP:
+                {
+                    valNODE vanode;
+                    vanode.setval(identstr.c_str());
+                    NODE vaNODE;
+                    vaNODE.type = NODE::VAL;
+                    vaNODE.vanode = vanode;
+                    NodeExpressions.push_back(vaNODE);
+                    VariableOperations.pop_front();
+                    laststate = NODE::VAL;
+                    return NODE::VAL;
+                }
+                break;
                 case NODE::VWRITE:
                 {
                     valNODE vanode;
@@ -420,6 +653,7 @@ static int parse()
                     vaNODE.vanode = vanode;
                     NodeExpressions.push_back(vaNODE);
                     VariableOperations.pop_front();
+                    laststate = NODE::VAL;
                     return NODE::VAL;
                 }
                 break;
@@ -448,15 +682,16 @@ static int parse()
     }
     if (lastchar == EOF)
     {
-        //return EOF;
+        return EOF;
     }
     //lastchar = getc(fi);
     return 0;
 }
 
 varNODE setvar = {};
+operatorNODE setop = {};
 
-void ParseNodeExpressions()
+void CompileNodeExpressions()
 {
     #if !defined(NPRINT)
     printf("Node count: %zu\n", NodeExpressions.size());
@@ -543,6 +778,141 @@ void ParseNodeExpressions()
                 }
             }
             break;
+
+            case NODE::VREAD:
+            {
+                if (ReadStack.size() != 0)
+                {
+                    auto node = NodeExpressions[i].vnode;
+                    auto ptr = ReadStack[0];
+                    auto itr = usrvars.find(node.name);
+                    if (itr == usrvars.end())
+                    {
+                        printf("ERROR: Variable name \"%s\" does not exist", node.name);
+                    } else
+                    {
+                        switch(ptr->value.type)
+                        {
+                            case typeNODE::NUMBER:
+                            {
+                                std::string lhsstr = std::to_string(ptr->value.number.val);
+                                std::string varstr = std::to_string(itr->second.value.number.val);
+                                #if !defined(NPRINT)
+                                printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
+                                #endif
+                                if (!setop.valid)
+                                {
+                                    ptr->value.setnumber(varstr.c_str());
+                                    #if !defined(NPRINT)
+                                    if (ptr->name != NULL)
+                                        printf("Set latest readstack variable \"%s\", to float: %.2Lf\n", ptr->name, ptr->value.number.val);
+                                    #endif
+                                    ReadStack.pop_front();
+                                } else
+                                {
+                                    if (strcmp(lhsstr.c_str(), "nan") == 0 || strcmp(lhsstr.c_str(), "-nan") == 0)
+                                        lhsstr = "0.0";
+                                    auto ret = setop.pfn(lhsstr.c_str(), varstr.c_str());
+                                    ptr->value.setnumber(ret);
+                                    #if !defined(NPRINT)
+                                    if (ptr->name != NULL)
+                                        printf("Set latest readstack variable \"%s\", to float: %.2Lf using an operator\n", ptr->name, ptr->value.number.val);
+                                    #endif
+                                    ReadStack.pop_front();
+                                    setop = {};
+                                    free((void*)ret);
+                                }
+                            }
+                            break;
+
+                            case typeNODE::STRING:
+                            {
+                                std::string lhsstr = ptr->value.str.val;
+                                std::string varstr = itr->second.value.str.val;
+                                #if !defined(NPRINT)
+                                printf("Reading variable \"%s\", and it has a value of \"%s\"\n", node.name, varstr.c_str());
+                                #endif
+                                if (!setop.valid)
+                                {
+                                    ptr->value.setstr(varstr.c_str());
+                                    #if !defined(NPRINT)
+                                    if (ptr->name != NULL)
+                                        printf("Set latest readstack variable \"%s\", to string: \"%s\"\n", ptr->name, ptr->value.str.val);
+                                    #endif
+                                    ReadStack.pop_front();
+                                } else
+                                {
+                                    if (ptr->value.str.val == NULL)
+                                        ptr->value.setstr("");
+                                    auto ret = setop.pfn(ptr->value.str.val, varstr.c_str());
+                                    ptr->value.setstr(ret);
+                                    #if !defined(NPRINT)
+                                    if (ptr->name != NULL)
+                                        printf("Set latest readstack variable \"%s\", to string: \"%s\" using an operator\n", ptr->name, ptr->value.str.val);
+                                    #endif
+                                    ReadStack.pop_front();
+                                    setop = {};
+                                    free((void*)ret);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            break;
+
+            case NODE::OP:
+            {
+                if(setvar.name != NULL)
+                {
+                    auto itr = usrvars.find(setvar.name);
+                    if (itr == usrvars.end())
+                    {
+                        printf("ERROR: Variable write failed\n");
+                        break;
+                    }
+                    switch(itr->second.value.type)
+                    {
+                        case typeNODE::NUMBER:
+                        {
+                            auto _itr = itr->second.value.number.getoperator(NodeExpressions[i].opnode.op);
+                            if (_itr != -1)
+                            {
+                                NodeExpressions[i].opnode.pfn = numops[_itr].second;
+                                NodeExpressions[i].opnode.valid = true;
+                            } else
+                            {
+                                printf("ERROR: Invalid float operator\n");
+                            }
+                        }
+                        break;
+
+                        case typeNODE::STRING:
+                        {
+                            auto _itr = itr->second.value.str.getoperator(NodeExpressions[i].opnode.op);
+                            if (_itr != -1)
+                            {
+                                NodeExpressions[i].opnode.pfn = strops[_itr].second;
+                                NodeExpressions[i].opnode.valid = true;
+                            } else
+                            {
+                                printf("ERROR: Invalid float operator\n");
+                            }
+                        }
+                        break;
+                    };
+                    if (NodeExpressions[i].opnode.valid)
+                    {
+                        #if !defined(NPRINT)
+                        printf("Latest variable pushed back to readstack for an operation\n");
+                        #endif
+                        ReadStack.push_front(&itr->second);
+                        setop = NodeExpressions[i].opnode;
+                    }
+                }
+            }
+            break;
             
             case NODE::VAL:
             {
@@ -554,24 +924,54 @@ void ParseNodeExpressions()
                     {
                         case typeNODE::NUMBER:
                         {
-                            ptr->value.setnumber(node.val);
-                            #if !defined(NPRINT)
-                            if (ptr->name != NULL)
-                                printf("Set latest readstack variable \"%s\", to float: %.2Lf\n", ptr->name, ptr->value.number.val);
-                            #endif
-                            ReadStack.pop_front();
-                            //VariableOperations.clear();
+                            if (!setop.valid)
+                            {
+                                ptr->value.setnumber(node.val);
+                                #if !defined(NPRINT)
+                                if (ptr->name != NULL)
+                                    printf("Set latest readstack variable \"%s\", to float: %.2Lf\n", ptr->name, ptr->value.number.val);
+                                #endif
+                                ReadStack.pop_front();
+                                //VariableOperations.clear();
+                            } else
+                            {
+                                std::string lhsstr = std::to_string(ptr->value.number.val);
+                                auto ret = setop.pfn(lhsstr.c_str(), node.val);
+                                ptr->value.setnumber(ret);
+                                #if !defined(NPRINT)
+                                if (ptr->name != NULL)
+                                    printf("Set latest readstack variable \"%s\", to float: %.2Lf using an operator\n", ptr->name, ptr->value.number.val);
+                                #endif
+                                ReadStack.pop_front();
+                                setop = {};
+                                free((void*)ret);
+                            }
+                            
                         }
                         break;
 
                         case typeNODE::STRING:
                         {
-                            ptr->value.setstr(node.val);
-                            #if !defined(NPRINT)
-                            if (ptr->name != NULL)
-                                printf("Set latest readstack variable \"%s\", to string: \"%s\"\n", ptr->name, ptr->value.str);
-                            #endif
-                            ReadStack.pop_front();
+                            if (!setop.valid)
+                            {
+                                ptr->value.setstr(node.val);
+                                #if !defined(NPRINT)
+                                if (ptr->name != NULL)
+                                    printf("Set latest readstack variable \"%s\", to string: \"%s\"\n", ptr->name, ptr->value.str.val);
+                                #endif
+                                ReadStack.pop_front();
+                            } else
+                            {
+                                auto ret = setop.pfn(ptr->value.str.val, node.val);
+                                ptr->value.setstr(ret);
+                                #if !defined(NPRINT)
+                                if (ptr->name != NULL)
+                                    printf("Set latest readstack variable \"%s\", to string: \"%s\" using an operator\n", ptr->name, ptr->value.str.val);
+                                #endif
+                                ReadStack.pop_front();
+                                setop = {};
+                                free((void*)ret);
+                            }
                         }
                         break;
                     }
@@ -591,7 +991,9 @@ int main(int argc, char* argv[])
         printf("Script wasnt found. Make a file named \"script.vtex\" in the build directory\n");
         return -1;
     }
+
     auto strt = c::high_resolution_clock::now();
+
     while(true)
     {
         if (parse() < 0)
@@ -601,10 +1003,10 @@ int main(int argc, char* argv[])
     }
     
 
-    ParseNodeExpressions();
+    CompileNodeExpressions();
 
     auto end = c::high_resolution_clock::now();
-    printf("Time: %.2lfus\n", c::duration<float, c::microseconds::period>(end - strt).count());
+    printf("Time: %.2lfμs\n", c::duration<float, c::microseconds::period>(end - strt).count());
     fclose(fi);
     return 0;
 }

@@ -107,3 +107,8 @@ build/.cmake/api/v1/reply/cache-v2-b042c190c88a77ce28ed.json
 build/.cmake/api/v1/reply/codemodel-v2-4ae204008a27ea97a476.json
 build/.cmake/api/v1/reply/index-2023-01-15T20-33-37-0967.json
 build/.cmake/api/v1/reply/index-2023-01-17T18-28-34-0216.json
+build/build.ninja
+build/intermediary.ivtex
+build/.cmake/api/v1/reply/cache-v2-b7eec986b0f3526963d6.json
+build/.cmake/api/v1/reply/index-2023-01-23T16-50-15-0119.json
+build/CMakeFiles/rules.ninja

@@ -112,3 +112,17 @@ build/intermediary.ivtex
 build/.cmake/api/v1/reply/cache-v2-b7eec986b0f3526963d6.json
 build/.cmake/api/v1/reply/index-2023-01-23T16-50-15-0119.json
 build/CMakeFiles/rules.ninja
+build/.ninja_deps
+build/.ninja_log
+build/Vllvm
+build/.cmake/api/v1/reply/cache-v2-6b578ccb3ab552aa8de9.json
+build/.cmake/api/v1/reply/cmakeFiles-v1-bec3ab7e20ff0aaa5cdf.json
+build/.cmake/api/v1/reply/codemodel-v2-3786c03839f9055acf67.json
+build/.cmake/api/v1/reply/index-2023-01-31T21-06-45-0703.json
+build/.cmake/api/v1/reply/target-acc_gen-Debug-ce5559e4ab4553edef4f.json
+build/.cmake/api/v1/reply/target-intrinsics_gen-Debug-02acfe21a19ba7a25e07.json
+build/.cmake/api/v1/reply/target-omp_gen-Debug-400d6e78e01dcb972a4d.json
+build/.cmake/api/v1/reply/target-Vllvm-Debug-ae91aabc3f086d72e9d4.json
+build/.cmake/api/v1/reply/target-Vtest-Debug-8bf2523b6facb9916172.json
+build/CMakeFiles/Vllvm.dir/src/llvmcompiler.cpp.o
+build/.cmake/api/v1/reply/index-2023-02-02T03-53-45-0033.json

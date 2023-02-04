@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.18)
 
+function(post_build_copy target from dest)
+    add_custom_command(
+        TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${from}
+            ${dest}
+            COMMENT "-- Post build copy of ${from} -> ${dest} --"
+    )
+endfunction(post_build_copy)
+
 #set(CMAKE_CXX_FLAGS "--static")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wall")
 project("Vortex")
@@ -29,4 +39,6 @@ set_target_properties(Vllvm PROPERTIES
 )
 message(STATUS "Libs: ${llvm_libs}")
 target_link_libraries(Vllvm PRIVATE ${llvm_libs})
+
+post_build_copy(Vllvm "${CMAKE_SOURCE_DIR}/src/example.vtex" "${CMAKE_BINARY_DIR}/example.vtex")
     #LINK_FLAGS "`llvm-config -cxxflags --ldflags --system-libs --libs core`")

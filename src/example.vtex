@@ -1,0 +1,6 @@
+extern sin(rad);
+function fooh(x y) x+y+sin(y);
+
+function bar (h) h*2+1;
+
+extern cos(rad);

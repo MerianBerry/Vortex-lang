@@ -26,12 +26,11 @@
 
 namespace c = std::chrono;
 
-template<class T>
 struct leaf
 {
     char* name = NULL;
     size_t size = 0;
-    T* ptr = nullptr;
+    void* ptr = nullptr;
     leaf* last = nullptr;
     leaf* next = nullptr;
 };
@@ -114,20 +113,25 @@ class BinaryTree
     }
 };
 
-class leafstorage
+class LeafArray
 {
 private:
     uint32_t count = 0;
-    leaf<void>* first = nullptr;
-    leaf<void>* last = nullptr;
+    leaf* first = nullptr;
+    leaf* last = nullptr;
     bool destroyed = false;
 public:
     template<class T>
-    leaf<void>* add(const char* name, T value)
+    leaf* add(const char* name, T value)
     {
         destroyed = false;
-        leaf<void>* l = new leaf<void>();
+        leaf* l = (leaf*)malloc(sizeof(leaf));
+        
         l->size = sizeof(value);
+        //std::unique_ptr<T> ptr = std::make_unique<T>(value);
+        
+        //printf("j = %s\n", *(T*)ptr.get());
+        //l->ptr = ptr.get();
         l->ptr = (void*)malloc(l->size);
         memcpy(l->ptr, &value, l->size);
 
@@ -157,9 +161,9 @@ public:
         return count;
     }
 
-    leaf<void>* get(const char* name)
+    leaf* get(const char* name)
     {
-        leaf<void>* itr = first;
+        leaf* itr = first;
         while(true)
         {
             //printf("next pointer: %p\n", itr->next);
@@ -174,7 +178,7 @@ public:
             itr = itr->next;
         }
     }
-    leaf<void>* destroy(const char* name)
+    leaf* destroy(const char* name)
     {
         auto leaflet = get(name);
         if (leaflet != nullptr)
@@ -193,16 +197,16 @@ public:
         return nullptr;
     }
 
-    leafstorage(/* args */)
+    LeafArray(/* args */)
     {
 
     }
-    ~leafstorage()
+    ~LeafArray()
     {
         if (!destroyed)
         {
             //printf("Leaf storage about to be destroyed\n");
-            leaf<void>* itr = first;
+            leaf* itr = first;
             while(true)
             {
                 //printf("itr pointer: %p\n", itr);
@@ -232,9 +236,45 @@ inline long double fastrand() {
 
 enum toks
 {
+    tok_eof,
 
+    tok_func,
+
+    tok_extern,
+
+    tok_ident,
+    tok_number
 };
-//const std::vector<const char*, int> keywords = {};
+
+
+const std::pair<const char*, int> keywords = {
+    {"function", tok_func},
+    {"extern", tok_extern}
+};
+
+static char identstr[1048] = "";
+static double numval = 0.0;
+
+static int gettok(FILE* file)
+{
+    static int lastchar = ' ';
+
+    while (isspace(lastchar))
+        lastchar = getc(file);
+    
+
+    if (isalpha(lastchar))
+    {
+        memset(identstr, 0, sizeof(identstr));
+        while (isalnum((lastchar = getc(file))))
+        {
+            const char ch[1] = {(char)lastchar};
+            strncat(identstr, ch, 1);
+        }
+    }
+
+    return 0;
+}
 
 int main(int argc, char* argv[])
 {

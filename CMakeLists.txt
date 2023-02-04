@@ -19,12 +19,13 @@ include_directories(${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
-llvm_map_components_to_libnames(llvm_libs core)
+llvm_map_components_to_libnames(llvm_libs core orcjit)
 
 add_executable(Vllvm "src/llvmcompiler.cpp")
 set_target_properties(Vllvm PROPERTIES
     CXX_STANDARD 17
+    LINK_FLAGS "`llvm-config --cxxflags --ldflags --libs`"
 )
 message(STATUS "Libs: ${llvm_libs}")
-target_link_libraries(Vllvm ${llvm_libs})
+target_link_libraries(Vllvm PRIVATE ${llvm_libs})
     #LINK_FLAGS "`llvm-config -cxxflags --ldflags --system-libs --libs core`")

@@ -12,10 +12,11 @@ add_executable(Vtest "src/compiler.cpp")
 set_target_properties(Vtest PROPERTIES
     CXX_STANDARD 17)
 
-
+#set(CMAKE_FIND_DEBUG_MODE ON)
 find_package(LLVM REQUIRED CONFIG)
 
 include_directories(${LLVM_INCLUDE_DIRS})
+message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 

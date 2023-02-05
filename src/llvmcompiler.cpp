@@ -15,6 +15,7 @@
 
 //LLVM includes
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
@@ -22,9 +23,15 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
 #if defined(NDEBUG)
 #define NPRINT
@@ -254,6 +261,15 @@ class ExprAST
     public:
         virtual ~ExprAST() = default;
         virtual llvm::Value *codegen() = 0;
+};
+
+class StringExprAST : public ExprAST
+{
+    std::string Val;
+
+    public:
+    StringExprAST(std::string Val) : Val(Val) {}
+    llvm::Value *codegen() override;
 };
 
 class NumberExprAST : public ExprAST
@@ -528,10 +544,21 @@ static std::unique_ptr<PrototypeAST> ParsePrototype()
 
     // Read the list of arg names
     std::vector<std::string> Argnames;
-    while(getNextToken() == tok_ident)
+    getNextToken();
+    while(Curtok == tok_ident)
     {
+        //printf("Token = %i\n", Curtok);
         //printf("Argname: %s\n", identstr);
         Argnames.push_back(identstr);
+
+        getNextToken();
+        if (Curtok != ',' && Curtok != ')')
+        {
+            return LogErrorP("expected ',' in arg list or ')' in prototype function");
+        }
+        if (Curtok == ')')
+            break;
+        getNextToken();
     }
     if (Curtok != ')')
         return LogErrorP("expected ')' in prototype function");
@@ -548,6 +575,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition()
     auto P = ParsePrototype();
     if (!P) return nullptr;
 
+    
     if (auto E = ParseExpression())
     {
         return std::make_unique<FunctionAST>(std::move(P), std::move(E));
@@ -582,6 +610,7 @@ using std::unique_ptr; using std::make_unique;
 static unique_ptr<LLVMContext> TheContext;
 static unique_ptr<IRBuilder<>> Builder;
 static unique_ptr<Module> TheModule;
+static unique_ptr<legacy::FunctionPassManager> TheFPM;
 struct cmp_str
 {
     bool operator()(char *a, char *b) const
@@ -590,6 +619,11 @@ struct cmp_str
     }
 };
 static std::map<char*, Value*, cmp_str> NamedValues;
+
+Value *StringExprAST::codegen()
+{
+    return ConstantDataArray::getString(*TheContext, Val);
+}
 
 Value *NumberExprAST::codegen()
 {
@@ -688,7 +722,7 @@ Function *FunctionAST::codegen()
 {
     // First, check for an existing funciton from a previous 'extern' declaration
     Function *TheFunction = TheModule->getFunction(Proto->getName());
-
+    
     if (!TheFunction)
     {
         TheFunction = Proto->codegen();
@@ -721,6 +755,8 @@ Function *FunctionAST::codegen()
 
         // Validate the generated code, checking for consistency
         verifyFunction(*TheFunction);
+
+        TheFPM->run(*TheFunction);
 
         return TheFunction;
     }
@@ -821,7 +857,7 @@ static std::vector<std::pair<char, int>> binopvec =
     {'/', 40}
 };
 
-static void InitializeModule()
+static void InitializeModuleAndPassManager()
 {
     // Open a new context and module
     TheContext = std::make_unique<LLVMContext>();
@@ -829,6 +865,20 @@ static void InitializeModule()
 
     // Create a new builder for the module
     Builder = std::make_unique<IRBuilder<>>(*TheContext);
+
+    TheFPM = make_unique<legacy::FunctionPassManager>(TheModule.get());
+
+    // Do simple "peephole" optimizations and bit-twiddling opts
+    TheFPM->add(createInstructionCombiningPass());
+    // Reassociate expressions
+    TheFPM->add(createReassociatePass());
+    // Eliminate common SubExpressions
+    TheFPM->add(createGVNPass());
+    // Simplify the control flow graph (deleting unreachable blocks, etc)
+    TheFPM->add(createCFGSimplificationPass());
+
+
+    TheFPM->doInitialization();
 }
 
 static bool VTEXSetup(const char* fileName)
@@ -843,7 +893,7 @@ static bool VTEXSetup(const char* fileName)
     {
         Binopmap[name] = prec;
     }
-    InitializeModule();
+    InitializeModuleAndPassManager();
     return true;
 }
 

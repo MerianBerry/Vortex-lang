@@ -1,4 +1,2 @@
-function foo(a b) a*a + 2*a*b + b*b;
-extern cos(x);
-cos(3.14158);
-cos(1.28);
+function foo(a, b) a*a + 2*a*b + b*b;
+foo(4, 5);

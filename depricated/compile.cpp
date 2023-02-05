@@ -8,6 +8,209 @@
 #include <string>
 #include <unordered_map>
 
+/*
+struct leaf
+{
+    char* name = NULL;
+    size_t size = 0;
+    void* ptr = nullptr;
+    leaf* last = nullptr;
+    leaf* next = nullptr;
+};
+
+
+struct binleaf
+{
+    char* name = NULL;
+    size_t size = 0;
+    void* ptr = nullptr;
+    binleaf* right = nullptr;
+    binleaf* left = nullptr;
+    binleaf* root = nullptr;
+};
+
+class BinaryTree
+{
+    private:
+        uint32_t count = 0;
+        binleaf* first = nullptr;
+        binleaf* last = nullptr;
+        bool destroyed = false;
+    public:
+    template<class T>
+    binleaf* add(const char* name, T value)
+    {
+        destroyed = false;
+
+        binleaf* leaflet = (binleaf*)malloc(sizeof(binleaf));
+        leaflet->size = sizeof(value);
+        
+        leaflet->name = (char*)name;
+        leaflet->ptr = (void*)malloc(leaflet->size);
+        memcpy(leaflet->ptr, &value, leaflet->size);
+
+        if (first == nullptr)
+        {
+            first = leaflet;
+        } else
+        {
+            binleaf* itr = first;
+            while(true)
+            {
+                if (strcmp(itr->name, leaflet->name) < 0)
+                {
+                    //printf("Right\n");
+                    if (itr->right == nullptr)
+                    {
+                        //printf("Push on %p right\n", itr);
+                        itr->right = leaflet;
+                        break;
+                    }
+
+                    //printf("Move to %p right\n", itr->right);
+                    itr = itr->right;
+                    continue;
+                } else
+                {
+                    //printf("left\n");
+                    if (itr->right == nullptr)
+                    {
+                        //printf("Push on %p left\n", itr);
+                        itr->left = leaflet;
+                        break;
+                    }
+
+                    //printf("Move to %p left\n", itr->left);
+                    itr = itr->left;
+                    continue;
+                }
+            }
+        }
+        last = leaflet;
+
+        return leaflet;
+    }
+
+    binleaf* begin()
+    {
+        return first;
+    }
+}; 
+
+class LeafArray
+{
+private:
+    uint32_t count = 0;
+    leaf* first = nullptr;
+    leaf* last = nullptr;
+    bool destroyed = false;
+public:
+    template<class T>
+    leaf* add(const char* name, T value)
+    {
+        destroyed = false;
+        leaf* l = (leaf*)malloc(sizeof(leaf));
+        
+        l->size = sizeof(value);
+        //std::unique_ptr<T> ptr = std::make_unique<T>(value);
+        
+        //printf("j = %s\n", *(T*)ptr.get());
+        //l->ptr = ptr.get();
+        l->ptr = (void*)malloc(l->size);
+        memcpy(l->ptr, &value, l->size);
+
+        //l->name = (char*)calloc(strlen(name)+1, 1);
+        //strcpy(l->name, name);
+        l->name = (char*)name;
+        l->last = last;
+        
+        //printf("current pointer: %p\n", l);        
+
+        if (last != nullptr)
+        {
+            last->next = l;
+            //printf("pointer: %p\n", last->next);
+            l->last = last;
+        }
+        last = l;
+        if (count == 0)
+        {
+            first = l;
+        }
+        ++count;
+        return l;
+    }
+    uint32_t size()
+    {
+        return count;
+    }
+
+    leaf* get(const char* name)
+    {
+        leaf* itr = first;
+        while(true)
+        {
+            //printf("next pointer: %p\n", itr->next);
+            if (strcmp(itr->name, name) == 0)
+            {
+                return itr;
+            }
+            if (itr == nullptr || itr->next == nullptr)
+            {
+                return nullptr;
+            }
+            itr = itr->next;
+        }
+    }
+    leaf* destroy(const char* name)
+    {
+        auto leaflet = get(name);
+        if (leaflet != nullptr)
+        {
+            auto leaflast = leaflet->last;
+            if (leaflast != nullptr)
+            {
+                leaflet->last->next = leaflet->next;
+                leaflet->next->last = leaflast;
+            }
+            free(leaflet->ptr);
+            free(leaflet);
+            count--;
+            return leaflast;
+        }
+        return nullptr;
+    }
+
+    LeafArray()
+    {
+
+    }
+    ~LeafArray()
+    {
+        if (!destroyed)
+        {
+            //printf("Leaf storage about to be destroyed\n");
+            leaf* itr = first;
+            while(true)
+            {
+                //printf("itr pointer: %p\n", itr);
+                if (itr == nullptr || itr->next == nullptr)
+                {
+                    break;
+                }
+                free(itr->ptr);
+                itr = itr->next;
+                if (itr->last != nullptr)
+                {
+                    free(itr->last);
+                }
+            }
+        }
+        destroyed = true;
+        count = 0;
+    }
+};*/
+
 enum TOKEN
 {
     ivar = -2,

@@ -102,3 +102,6 @@ build/.cmake/api/v1/reply/target-intrinsics_gen-Debug-b60131da0871d9ebc6f5.json
 build/.cmake/api/v1/reply/target-omp_gen-Debug-5eb59d93702e0cb15b8a.json
 build/.cmake/api/v1/reply/target-Vllvm-Debug-fcb96d0a8d54df57b8c0.json
 build/.cmake/api/v1/reply/target-Vtest-Debug-c69161b5524452126a43.json
+build/.cmake/api/v1/reply/codemodel-v2-bc73e95832ba17308a47.json
+build/.cmake/api/v1/reply/index-2023-02-05T00-17-09-0942.json
+build/.cmake/api/v1/reply/target-Vllvm-Debug-a1e7f17c540acb7caf7b.json

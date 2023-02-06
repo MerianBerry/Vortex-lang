@@ -3,6 +3,7 @@
 #include "operators.h"
 #include "tokens.h"
 #include "keywords.h"
+#include "value.h"
 
 // C headers
 #include <cstdio>
@@ -168,6 +169,7 @@ class NumberExpr : public Expr
 class VariableExpr : public Expr
 {
     std::string Name = "";
+    bool isnan = true;
     public:
         VariableExpr(std::string Name) : Name(Name) {}
         std::string tostring()
@@ -176,12 +178,33 @@ class VariableExpr : public Expr
         }
 };
 
+class ValueExpr : public Expr
+{
+    std::unique_ptr<vtex::Value> Val;
+    public:
+        ValueExpr(std::unique_ptr<vtex::Value> Val) : Val(std::move(Val)) {}
+        std::string tostring()
+        {
+            return Val->val->tostring();
+        }
+};
+
+class BinopExpr : public Expr
+{
+    std::string Op = "__null";
+    std::unique_ptr<vtex::Value> LHS, RHS;
+    public:
+        BinopExpr(std::string Op, std::unique_ptr<vtex::Value> LHS, std::unique_ptr<vtex::Value> RHS) :
+            Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+};
+
 #pragma endregion // End AST region
 
 
 #pragma region "Parser"
 
 static std::unordered_map<std::string, int> usrvarmap;
+static std::unordered_map<std::string, int> binopmap;
 
 static std::unique_ptr<Expr> LogError(const char* str)
 {
@@ -194,7 +217,7 @@ static std::unique_ptr<Expr> LogStatus(const char* str)
     return nullptr;
 }
 
-static std::unique_ptr<Expr> ParseString()
+static std::unique_ptr<vtex::Value> ParseString()
 {
     stringstr = "";
     while((curtok = getnext()) != '\"' && curtok != EOF)
@@ -202,10 +225,13 @@ static std::unique_ptr<Expr> ParseString()
         stringstr += curtok;
     }
     if (curtok == EOF)
-        return LogError("string literall extends to EOF");
+    {
+        LogError("string literall extends to EOF");
+        return nullptr;
+    }
 
     lastchar = getnexttoken(); // Eat ending '"' and restore the lexer
-    return std::make_unique<StringExpr>(vtex::String(stringstr));
+    return std::make_unique<vtex::Value>(vtex::String(stringstr));
 }
 
 static std::unique_ptr<Expr> ParseDefinition()
@@ -221,23 +247,44 @@ static std::unique_ptr<Expr> ParseDefinition()
     return std::make_unique<VariableExpr>(identstr.c_str());
 }
 
+static int GetBinopPrec(std::string op)
+{
+    auto itr = binopmap.find(op);
+    if (itr == binopmap.end())
+        return -1;
+    return itr->second;
+}
+
 static std::unique_ptr<Expr> ParseExpression()
 {
-    std::unique_ptr<Expr> LHS;
+    std::unique_ptr<vtex::Value> LHS;
+    std::unique_ptr<vtex::Value> RHS;
 
     switch(curtok)
     {
         case tok_number:
-            LHS = std::make_unique<NumberExpr>(vtex::LFloat(strtold(numstr.c_str(), nullptr)));
+            LHS = std::make_unique<vtex::Value>(vtex::LFloat(strtold(numstr.c_str(), nullptr)));
             break;
         case tok_string:
-            LHS = std::move(ParseString());
+            LHS = ParseString();
+            break;
+        case tok_ident:
+            if (usrvarmap.find(identstr) != usrvarmap.end())
+            {
+                LogStatus(stringf("Variable read operation on \"%s\"", identstr.c_str()).c_str());
+                return nullptr;
+            }
             break;
         default:
             return LogError("unknown token in expression");
     }
+    std::string str = ""+(char)getnexttoken(); // Eat LHS to get binop
+    int thisprec = GetBinopPrec(str);
+    if (thisprec < 0)
+        return std::make_unique<ValueExpr>(LHS);
 
-    return LHS;
+    getnexttoken(); // Eat binop  
+    //return LHS;
 }
 
 static std::unique_ptr<Expr> ParseSet()
@@ -249,7 +296,7 @@ static std::unique_ptr<Expr> ParseSet()
     {
         LogStatus(stringf("LHS = %s", LHS->tostring().c_str()).c_str());
     }
-
+    
     return nullptr;
 }
 
@@ -262,6 +309,9 @@ static std::unique_ptr<Expr> ParseIdentity()
     switch(curtok)
     {
         case '=':
+            if (usrvarmap.find(identstr) == usrvarmap.end())
+                LogError("variable name does not exist");
+            LogStatus(stringf("Variable set operation on \"%s\"", lident.c_str()).c_str());
             ParseSet();
             break;
         default:
@@ -275,6 +325,8 @@ static std::unique_ptr<Expr> ParseIdentity()
 
 
 #pragma region "IR generator"
+
+
 
 #pragma endregion // End IR generator region
 
@@ -303,6 +355,8 @@ int compile()
 int main(int argc, char* argv[])
 {
     newlevel("new a = \"hello\" new h = 69.420");
+
+    binopmap["+"] = 10;
 
     auto start = c::high_resolution_clock::now();
     compile();

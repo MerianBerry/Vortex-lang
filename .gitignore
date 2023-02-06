@@ -105,3 +105,10 @@ build/.cmake/api/v1/reply/target-Vtest-Debug-c69161b5524452126a43.json
 build/.cmake/api/v1/reply/codemodel-v2-bc73e95832ba17308a47.json
 build/.cmake/api/v1/reply/index-2023-02-05T00-17-09-0942.json
 build/.cmake/api/v1/reply/target-Vllvm-Debug-a1e7f17c540acb7caf7b.json
+build/Vnew
+build/.cmake/api/v1/reply/cache-v2-2fc443453ad8cace5ce6.json
+build/.cmake/api/v1/reply/codemodel-v2-2e40a83c5e06ed62a5d1.json
+build/.cmake/api/v1/reply/index-2023-02-06T03-28-48-0048.json
+build/.cmake/api/v1/reply/target-Vllvm-Debug-ef9bb7e6f0ff3ea9270a.json
+build/.cmake/api/v1/reply/target-Vnew-Debug-7a2dda8e0a66f3ffa382.json
+build/CMakeFiles/Vnew.dir/src/generator.cpp.o

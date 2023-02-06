@@ -30,9 +30,9 @@ message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
-llvm_map_components_to_libnames(llvm_libs core)
+llvm_map_components_to_libnames(llvm_libs core orcjit native)
 
-add_executable(Vllvm "src/llvmcompiler.cpp")
+add_executable(Vllvm "src/llvmcompiler.cpp" "src/JIT.h")
 set_target_properties(Vllvm PROPERTIES
     CXX_STANDARD 17
     LINK_FLAGS "`llvm-config --cxxflags --ldflags --libs`"
@@ -42,3 +42,8 @@ target_link_libraries(Vllvm PRIVATE ${llvm_libs})
 
 post_build_copy(Vllvm "${CMAKE_SOURCE_DIR}/src/example.vtex" "${CMAKE_BINARY_DIR}/example.vtex")
     #LINK_FLAGS "`llvm-config -cxxflags --ldflags --system-libs --libs core`")
+
+add_executable(Vnew "src/generator.cpp")
+set_target_properties(Vnew PROPERTIES
+    CXX_STANDARD 17
+    LINK_FLAGS "--static")

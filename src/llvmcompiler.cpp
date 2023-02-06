@@ -32,6 +32,7 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "JIT.h"
 
 #if defined(NDEBUG)
 #define NPRINT
@@ -604,13 +605,14 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr()
 //-- CODEGEN --//
 //-----------------//
 
-using namespace llvm;
+using namespace llvm; using namespace llvm::orc;
 using std::unique_ptr; using std::make_unique;
 
 static unique_ptr<LLVMContext> TheContext;
 static unique_ptr<IRBuilder<>> Builder;
 static unique_ptr<Module> TheModule;
 static unique_ptr<legacy::FunctionPassManager> TheFPM;
+static unique_ptr<JIT> TheJIT;
 struct cmp_str
 {
     bool operator()(char *a, char *b) const
@@ -770,6 +772,33 @@ Function *FunctionAST::codegen()
 //-- DRIVER --//
 //-----------------//
 
+static void InitializeModuleAndPassManager()
+{
+    // Open a new context, JIT, and module
+    TheContext = std::make_unique<LLVMContext>();
+    TheModule = std::make_unique<Module>("Vortex JIT", *TheContext);
+    TheModule->setDataLayout(TheJIT->getDataLayout());
+
+    // Create a new builder for the module
+    Builder = std::make_unique<IRBuilder<>>(*TheContext);
+
+    TheFPM = make_unique<legacy::FunctionPassManager>(TheModule.get());
+
+    // Do simple "peephole" optimizations and bit-twiddling opts
+    TheFPM->add(createInstructionCombiningPass());
+    // Reassociate expressions
+    TheFPM->add(createReassociatePass());
+    // Eliminate common SubExpressions
+    TheFPM->add(createGVNPass());
+    // Simplify the control flow graph (deleting unreachable blocks, etc)
+    TheFPM->add(createCFGSimplificationPass());
+
+
+    TheFPM->doInitialization();
+}
+
+static ExitOnError ExitOnErr;
+
 static void HandleDef()
 {
     if (auto FnAST = ParseDefinition())
@@ -802,14 +831,34 @@ static void HandleTopLevelExpr()
 {
     if (auto FnAST = ParseTopLevelExpr())
     {
-        if (auto *FnIR = FnAST->codegen())
+        //LogStatus("Parsed function\n");
+        //auto start = c::high_resolution_clock::now();
+        //InitializeModuleAndPassManager();
+        //auto end = c::high_resolution_clock::now();
+        //printf("Duration: %.2fus\n", c::duration<float, c::microseconds::period>(end-start).count());
+        if (FnAST->codegen())
         {
-            LogStatus("read top-level expr:\n");
-            FnIR->print(errs());
-            fprintf(stderr, "\n");
+            // Craete a Resource Tracker to track JIT'd memory allocated to our
+            // anonymous expression -- that way we can free it after executing
+            auto RT = TheJIT->getMainJITDylib().createResourceTracker();
 
-            // Remove the anonymous expression
-            FnIR->eraseFromParent();
+            auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
+            //printf("PTR = %p\n", TSM.getModuleUnlocked());
+            ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
+            InitializeModuleAndPassManager();
+
+            // Search the JIT for the __anon_expr symbol
+            auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
+            if (!ExprSymbol)
+                LogError("function \"__anon_expr\" not found\n");
+
+            // Get the symbol's address and cast it to the right type
+            // (takes no args, returns a double) so we can call it as a native function
+            double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
+            LogStatus(stringf("Evaluated to %.3f\n", FP()).c_str());
+
+            // Delete anonymous expression module from the JIT
+            ExitOnErr(RT->remove());
         }
     } else // error recovery
         getNextToken();
@@ -857,32 +906,8 @@ static std::vector<std::pair<char, int>> binopvec =
     {'/', 40}
 };
 
-static void InitializeModuleAndPassManager()
-{
-    // Open a new context and module
-    TheContext = std::make_unique<LLVMContext>();
-    TheModule = std::make_unique<Module>("Vortex JIT", *TheContext);
-
-    // Create a new builder for the module
-    Builder = std::make_unique<IRBuilder<>>(*TheContext);
-
-    TheFPM = make_unique<legacy::FunctionPassManager>(TheModule.get());
-
-    // Do simple "peephole" optimizations and bit-twiddling opts
-    TheFPM->add(createInstructionCombiningPass());
-    // Reassociate expressions
-    TheFPM->add(createReassociatePass());
-    // Eliminate common SubExpressions
-    TheFPM->add(createGVNPass());
-    // Simplify the control flow graph (deleting unreachable blocks, etc)
-    TheFPM->add(createCFGSimplificationPass());
-
-
-    TheFPM->doInitialization();
-}
-
 static bool VTEXSetup(const char* fileName)
-{
+{   
     FILE* fi = fopen(fileName, "r");
     if (!fi)
     {
@@ -893,6 +918,11 @@ static bool VTEXSetup(const char* fileName)
     {
         Binopmap[name] = prec;
     }
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+
+    TheJIT = ExitOnErr(JIT::Create());
     InitializeModuleAndPassManager();
     return true;
 }

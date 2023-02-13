@@ -4,6 +4,7 @@
 #include "tokens.h"
 #include "keywords.h"
 #include "value.h"
+#include "vstring.h"
 
 // C headers
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <cstring>
 #include <cmath>
 #include <cctype>
+#include <ctime>
 
 // CXX headers
 #include <chrono> // For duration diagnostics
@@ -20,25 +22,36 @@
 #include <memory>
 #include <unordered_map>
 #include <stdexcept>
+#include <iostream>
+#include <iomanip>
 
 namespace c = std::chrono;
-
-template<typename ... Args>
-inline std::string stringf( const std::string& format, Args ... args )
-{
-    int size_s = std::snprintf( nullptr, 0, format.c_str(), args ... ) + 1; // Extra space for '\0'
-    if( size_s <= 0 ){ throw std::runtime_error( "Error during formatting." ); }
-    auto size = static_cast<size_t>( size_s );
-    auto buf = std::make_unique<char[]>( size );
-    std::snprintf( buf.get(), size, format.c_str(), args ... );
-    return std::string( buf.get(), buf.get() + size - 1 ); // We don't want the '\0' inside
-}
 
 static unsigned int g_seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 inline long double fastrand() { 
   g_seed = (214013*g_seed+2531011); 
   return (long double)((g_seed>>16)&0x7FFF) / (long double)0x7FFF; 
 } 
+
+FILE* __logfile = NULL;
+template<typename ... Args>
+void* Logf(std::string fmt, Args ... args)
+{
+    if (__logfile == nullptr)
+    {
+        __logfile = fopen("log.txt", "w");
+    }
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
+    fprintf(__logfile, "[%s]: %s\n", oss.str().c_str(), stringf(fmt.c_str(), args...).c_str());
+    #if !defined(NPRINT)
+    fprintf(stderr, "[%s]: %s\n", oss.str().c_str(), stringf(fmt.c_str(), args...).c_str());
+    #endif
+
+    return nullptr;
+}
 
 #pragma region "Lexer"
 
@@ -185,6 +198,8 @@ class ValueExpr : public Expr
         ValueExpr(std::unique_ptr<vtex::Value> Val) : Val(std::move(Val)) {}
         std::string tostring()
         {
+            if (!Val)
+                return "null";
             return Val->val->tostring();
         }
 };
@@ -192,10 +207,14 @@ class ValueExpr : public Expr
 class BinopExpr : public Expr
 {
     std::string Op = "__null";
-    std::unique_ptr<vtex::Value> LHS, RHS;
+    std::unique_ptr<Expr> LHS, RHS;
     public:
-        BinopExpr(std::string Op, std::unique_ptr<vtex::Value> LHS, std::unique_ptr<vtex::Value> RHS) :
+        BinopExpr(std::string Op, std::unique_ptr<Expr> LHS, std::unique_ptr<Expr> RHS) :
             Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+    std::string tostring() override
+    {
+        return stringf("%s %s %s", LHS->tostring().c_str(), Op.c_str(), RHS->tostring().c_str());
+    }
 };
 
 #pragma endregion // End AST region
@@ -203,7 +222,7 @@ class BinopExpr : public Expr
 
 #pragma region "Parser"
 
-static std::unordered_map<std::string, int> usrvarmap;
+static std::unordered_map<std::string, std::unique_ptr<VariableExpr>> usrvarmap;
 static std::unordered_map<std::string, int> binopmap;
 
 static std::unique_ptr<Expr> LogError(const char* str)
@@ -231,7 +250,7 @@ static std::unique_ptr<vtex::Value> ParseString()
     }
 
     lastchar = getnexttoken(); // Eat ending '"' and restore the lexer
-    return std::make_unique<vtex::Value>(vtex::String(stringstr));
+    return std::make_unique<vtex::Value>(std::make_unique<vtex::String>(stringstr));
 }
 
 static std::unique_ptr<Expr> ParseDefinition()
@@ -241,50 +260,102 @@ static std::unique_ptr<Expr> ParseDefinition()
     if (curtok != tok_ident)
         return LogError("expected an identifier after \"new\"");
     
-    usrvarmap[identstr.c_str()] = 0;
+    usrvarmap[identstr.c_str()] = std::make_unique<VariableExpr>(identstr.c_str());
     LogStatus(stringf("New variable \"%s\"", identstr.c_str()).c_str());
 
     return std::make_unique<VariableExpr>(identstr.c_str());
 }
 
-static int GetBinopPrec(std::string op)
+static std::unique_ptr<Expr> ParsePrimary()
 {
-    auto itr = binopmap.find(op);
+    switch(curtok)
+    {
+        case tok_number:
+            return std::make_unique<ValueExpr>(std::make_unique<vtex::Value>(std::make_unique<vtex::LFloat>(strtold(numstr.c_str(), nullptr))));
+        case tok_string:
+            return std::make_unique<ValueExpr>(ParseString());
+        case tok_ident:
+            if (usrvarmap.find(identstr) != usrvarmap.end())
+            {
+                LogStatus(stringf("Variable read operation on \"%s\"", identstr.c_str()).c_str());
+                return std::make_unique<VariableExpr>(identstr);
+            } else
+            {
+                return LogError(stringf("Unknown identity \"%s\" in expression", identstr.c_str()).c_str());
+            }
+        default:
+            return LogError(stringf("unknown token %i in expression", curtok).c_str());
+    }
+}
+
+static int GetBinopPrec()
+{
+    std::string str = static_cast<std::string>("")+(char)curtok;
+    auto itr = binopmap.find(str);
     if (itr == binopmap.end())
         return -1;
     return itr->second;
 }
 
+static std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
+{
+    while(true)
+    {
+        int Prec = GetBinopPrec();
+        if (Prec < Expected)
+        {
+            return LHS;
+        }
+
+        auto op = static_cast<std::string>("")+(char)curtok;
+
+        getnexttoken(); // Eat binop
+        auto RHS = ParsePrimary();
+        if (!RHS)
+        {
+            return LogError("Right hand symbol (RHS) is null");
+        }
+
+        getnexttoken(); // Eat the primary
+
+        // If the next binop has more precedence, give it RHS with a higher expected precedence
+        int Next = GetBinopPrec();
+        if (Prec < Next)
+        {
+            RHS = ParseRHS(Prec+1, std::move(RHS));
+            if (!RHS)
+            {
+                return LogError("Right hand symbol (RHS) is null");
+            } else
+            {
+                LogStatus(stringf("Higher level RHS = %s", RHS->tostring().c_str()).c_str());
+            }
+        }
+
+        // Git branch merge
+        LHS = std::make_unique<BinopExpr>(op, std::move(LHS), std::move(RHS));
+    }
+}
+
 static std::unique_ptr<Expr> ParseExpression()
 {
-    std::unique_ptr<vtex::Value> LHS;
-    std::unique_ptr<vtex::Value> RHS;
+    std::unique_ptr<Expr> LHS;
+    std::unique_ptr<Expr> RHS;
 
-    switch(curtok)
+    LHS = ParsePrimary();
+
+    if (!LHS)
     {
-        case tok_number:
-            LHS = std::make_unique<vtex::Value>(vtex::LFloat(strtold(numstr.c_str(), nullptr)));
-            break;
-        case tok_string:
-            LHS = ParseString();
-            break;
-        case tok_ident:
-            if (usrvarmap.find(identstr) != usrvarmap.end())
-            {
-                LogStatus(stringf("Variable read operation on \"%s\"", identstr.c_str()).c_str());
-                return nullptr;
-            }
-            break;
-        default:
-            return LogError("unknown token in expression");
+        return LogError("Left hand symbol (LHS) is null");
     }
-    std::string str = ""+(char)getnexttoken(); // Eat LHS to get binop
-    int thisprec = GetBinopPrec(str);
-    if (thisprec < 0)
-        return std::make_unique<ValueExpr>(LHS);
+    getnexttoken();
 
-    getnexttoken(); // Eat binop  
-    //return LHS;
+    RHS = ParseRHS(0, std::move(LHS));
+    if (!!RHS)
+    {
+        LogStatus(stringf("RHS = %s", RHS->tostring().c_str()).c_str());
+    }
+    return RHS;
 }
 
 static std::unique_ptr<Expr> ParseSet()
@@ -308,14 +379,15 @@ static std::unique_ptr<Expr> ParseIdentity()
 
     switch(curtok)
     {
+        /*
         case '=':
             if (usrvarmap.find(identstr) == usrvarmap.end())
                 LogError("variable name does not exist");
             LogStatus(stringf("Variable set operation on \"%s\"", lident.c_str()).c_str());
             ParseSet();
-            break;
+            break;*/
         default:
-            return LogStatus("nothing to parse for identity");
+            return nullptr;//LogStatus("nothing to parse for identity");
     }
 
     return nullptr;
@@ -345,6 +417,10 @@ int compile()
             case tok_ident:
                 ParseIdentity();
                 break;
+            case '=':
+                getnexttoken();
+                ParseExpression();
+                break;
             default:
                 getnexttoken();
         }
@@ -354,10 +430,14 @@ int compile()
 
 int main(int argc, char* argv[])
 {
-    newlevel("new a = \"hello\" new h = 69.420");
+    newlevel("new a = \"hello\" new j = 23.420 j = 3\nnew h = 69.420 + 453 * j / 2");
 
     binopmap["+"] = 10;
-
+    binopmap["-"] = 10;
+    binopmap["*"] = 30;
+    binopmap["/"] = 30;
+    binopmap["^"] = 40;
+    
     auto start = c::high_resolution_clock::now();
     compile();
     auto end = c::high_resolution_clock::now();

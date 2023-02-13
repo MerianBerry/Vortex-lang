@@ -1,8 +1,10 @@
 #pragma once
 
+#include "vstring.h"
 #include <cstdlib>
 #include <string>
 #include <memory>
+
 
 namespace vtex
 {

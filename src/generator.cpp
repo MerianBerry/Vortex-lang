@@ -54,6 +54,23 @@ void* Logf(std::string fmt, Args ... args)
 
     return nullptr;
 }
+void* Logf(std::string fmt)
+{
+    if (__logfile == nullptr)
+    {
+        __logfile = fopen("log.txt", "w");
+    }
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
+    fprintf(__logfile, "[%s]: %s\n", oss.str().c_str(), fmt.c_str());
+    #if !defined(NPRINT)
+    fprintf(stderr, "[%s]: %s\n", oss.str().c_str(), fmt.c_str());
+    #endif
+
+    return nullptr;
+}
 
 #pragma region "Lexer"
 
@@ -190,7 +207,7 @@ class VariableExpr : public Expr
     bool isnan = true;
     public:
         VariableExpr(std::string Name) : Name(Name) {}
-        std::string tostring()
+        std::string tostring() override
         {
             return Name;
         }
@@ -202,7 +219,7 @@ class ValueExpr : public Expr
     std::unique_ptr<vtex::Value> Val;
     public:
         ValueExpr(std::unique_ptr<vtex::Value> Val) : Val(std::move(Val)) {}
-        std::string tostring()
+        std::string tostring() override
         {
             if (!Val)
                 return "null";
@@ -285,22 +302,65 @@ class FunctionExpr : public Expr
 
 #pragma region "Parser"
 
- std::unordered_map<std::string, std::unique_ptr<VariableExpr>> usrvarmap;
- std::unordered_map<std::string, int> binopmap;
+std::unordered_map<std::string, int> usrvarmap;
+std::vector<std::unordered_map<std::string, int>> ScopeMap;
+int scope = 0;
+bool ErrorOccurred = false;
 
- std::unique_ptr<Expr> LogError(const char* str)
+int RaiseScope()
+{   
+    if (scope < 1000)
+    ++scope;
+    return scope;
+}
+
+int LowerScope()
+{
+    if (scope > 0)
+    --scope;
+    return scope;
+}
+
+bool varexists(std::string str)
+{   
+    if (ScopeMap.size() > 0)
+    for (auto i = ScopeMap.rbegin(); i != ScopeMap.rend(); ++i)
+    {
+        auto itr = i->find(str);
+        if (itr != i->end())
+            return true;
+    }
+
+    return (usrvarmap.find(str) != usrvarmap.end());
+}
+
+void putvar(std::string name)
+{
+    if (ScopeMap.size() == 0)
+    {
+        usrvarmap[name] = 0;
+    } else
+    {
+        ScopeMap.back()[name] = 0;
+    }
+}
+
+std::unordered_map<std::string, int> binopmap;
+
+std::unique_ptr<Expr> LogError(const char* str)
 {
     //if (verbose)
     fprintf(stderr, "ERROR [Ln %zu, Col %lld]: %s\n", line, column, str);
+    ErrorOccurred = true;
     return nullptr;
 }
- std::unique_ptr<Expr> LogStatus(const char* str)
+std::unique_ptr<Expr> LogStatus(const char* str)
 {
     if (verbose)
-    fprintf(stderr, "Status [Ln %zu, Col %lld]: %s\n", line, column, str);
+    fprintf(stderr, "[Ln %zu, Col %lld]: %s\n", line, column, str);
     return nullptr;
 }
- void* LogNote(const char* str)
+std::unique_ptr<Expr> LogNote(const char* str)
 {
     //if (verbose)
     fprintf(stderr, "Note [Ln %zu, Col %lld]: %s\n", line, column, str);
@@ -316,7 +376,7 @@ class FunctionExpr : public Expr
     }
     if (curtok == EOF)
     {
-        LogError("string literall extends to EOF");
+        LogError("String literall extends to EOF");
         return nullptr;
     }
 
@@ -329,9 +389,14 @@ class FunctionExpr : public Expr
     getnexttoken(); // Eat "new"
 
     if (curtok != tok_ident)
-        return LogError("expected an identifier after \"new\"");
+        return LogError("Expected an identifier after \"new\"");
     
-    usrvarmap[identstr.c_str()] = std::make_unique<VariableExpr>(identstr.c_str());
+    if (varexists(identstr))
+    {
+        LogNote(stringf("Redifinition of variable \"%s\"", identstr.c_str()).c_str());
+    }
+    putvar(identstr);
+    //usrvarmap[identstr.c_str()] = 0;
     LogStatus(stringf("New variable \"%s\"", identstr.c_str()).c_str());
 
     return std::make_unique<VariableExpr>(identstr.c_str());
@@ -341,75 +406,51 @@ class FunctionExpr : public Expr
 {
     getnexttoken(); // Eat "function"
     //LogStatus("Found function specifier");
+    std::string name = "";
     if (curtok == tok_ident)
     {
         LogStatus("Found function variable");
-        std::string name = identstr;
+        name = identstr;
         getnexttoken();
-        if (curtok != '(')
-        {
-            LogError("expected '(' after function specifier");
-            return nullptr;
-        }
-        getnexttoken();
-        std::vector<std::string> argnames = {};
-        while(curtok != ')')
-        {
-            if (curtok != tok_ident)
-            {
-                LogError("expected identifier in prototype argument definitions");
-                return nullptr;
-            }
-            LogStatus(stringf("Function parameter: \"%s\"", identstr.c_str()).c_str());
-            argnames.push_back(identstr);
-            getnexttoken();
-
-            
-            if (curtok != ',' && curtok == ')')
-            {
-                break;
-            } else if (curtok != ',' && curtok != ')')
-            {
-                LogError("expected ',' or ')' in prototype argument definitions");
-                return nullptr;
-            }
-            getnexttoken();
-        }
-        return std::make_unique<ProtoExpr>(name, argnames);
     } else
     {
         LogStatus("Found first class function");
-        if (curtok != '(')
+        name = "__anon_function";
+    }
+
+    if (curtok != '(')
+    {
+        LogError("Expected '(' after function specifier");
+        return nullptr;
+    }
+    getnexttoken();
+    std::vector<std::string> argnames = {};
+    std::unordered_map<std::string, int> map;
+    
+    while(curtok != ')')
+    {
+        if (curtok != tok_ident)
         {
-            LogError("expected '(' after function specifier");
+            LogError("Expected identifier in prototype argument definitions");
+            return nullptr;
+        }
+        LogStatus(stringf("Function parameter: \"%s\"", identstr.c_str()).c_str());
+        argnames.push_back(identstr);
+        map[identstr] = 0;//std::make_unique<VariableExpr>(identstr);
+        getnexttoken();
+        
+        if (curtok != ',' && curtok == ')')
+        {
+            break;
+        } else if (curtok != ',' && curtok != ')')
+        {
+            LogError("Expected ',' or ')' in prototype argument definitions");
             return nullptr;
         }
         getnexttoken();
-        std::vector<std::string> argnames = {};
-        while(curtok != ')')
-        {
-            if (curtok != tok_ident)
-            {
-                LogError("expected identifier in prototype argument definitions");
-                return nullptr;
-            }
-            LogStatus(stringf("Function parameter: \"%s\"", identstr.c_str()).c_str());
-            argnames.push_back(identstr);
-            getnexttoken();
-
-            
-            if (curtok != ',' && curtok == ')')
-            {
-                break;
-            } else if (curtok != ',' && curtok != ')')
-            {
-                LogError("expected ',' or ')' in prototype argument definitions");
-                return nullptr;
-            }
-            getnexttoken();
-        }
-        return std::make_unique<ProtoExpr>("__anon_function", argnames);
     }
+    ScopeMap.push_back(map);
+    return std::make_unique<ProtoExpr>(name, argnames);
 }
 
  std::vector<std::unique_ptr<Expr>> ParseScope();
@@ -423,10 +464,12 @@ class FunctionExpr : public Expr
     if (curtok != '{' && !!P)
     {
         LogNote("Function has no scope");
+        ScopeMap.pop_back();
         return std::make_unique<FunctionExpr>(std::move(P), std::vector<std::unique_ptr<Expr>>(0));
     } else if (!!P)
     {
         B = ParseScope();
+        ScopeMap.pop_back();
         if (B.size() != 0)
         {
             return std::make_unique<FunctionExpr>(std::move(P), std::move(B));
@@ -447,7 +490,7 @@ class FunctionExpr : public Expr
         case tok_string:
             return std::make_unique<ValueExpr>(ParseString());
         case tok_ident:
-            if (usrvarmap.find(identstr) != usrvarmap.end())
+            if (varexists(identstr))
             {
                 LogStatus(stringf("Variable read operation on \"%s\"", identstr.c_str()).c_str());
                 return std::make_unique<VariableExpr>(identstr);
@@ -458,7 +501,7 @@ class FunctionExpr : public Expr
         case tok_func:
             return ParseFunction();
         default:
-            return LogError(stringf("unknown token %i in expression", curtok).c_str());
+            return LogError(stringf("Unknown token %i in expression", curtok).c_str());
     }
 }
 
@@ -605,7 +648,6 @@ class FunctionExpr : public Expr
  std::vector<std::unique_ptr<Expr>> ParseScope()
 {
     getnexttoken();
-
     
     std::vector<std::unique_ptr<Expr>> vec;
     while(curtok != '}')
@@ -639,7 +681,25 @@ class FunctionExpr : public Expr
 #pragma region "IR generator"
 std::string IR = "";
 
+int StringExpr::codegen()
+{
+    return 0;
+}
 
+int NumberExpr::codegen()
+{
+    return 0;
+}
+
+int VariableExpr::codegen()
+{
+    return 0;
+}
+
+int ValueExpr::codegen()
+{
+    return 0;
+}
 
 
 #pragma endregion // End IR generator region
@@ -681,7 +741,7 @@ int compile()
 
 int main(int argc, char* argv[])
 {
-    newlevel("new h = 3+6");
+    newlevel("function h(hello){new k = hello+5}");
 
     binopmap["+"] = 10;
     binopmap["-"] = 10;
@@ -691,6 +751,14 @@ int main(int argc, char* argv[])
     
     auto start = c::high_resolution_clock::now();
     compile();
+    if (ErrorOccurred)
+    {
+        Logf("Fatal errors have occurred while compilation, will not continue.");
+        //fprintf(stderr, "Fatal errors have occurred while compilation, will not continue.\n");
+    } else
+    {
+        Logf("Code was compiled successfully, will continue.");
+    }
     auto end = c::high_resolution_clock::now();
     fprintf(stderr, "Compile time took %0.2fμs\n", c::duration<float, c::microseconds::period>(end-start).count());
 }

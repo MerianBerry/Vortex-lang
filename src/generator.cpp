@@ -217,6 +217,22 @@ class BinopExpr : public Expr
     }
 };
 
+class ProtoExpr
+{
+    std::string Name = "__anon_function";
+    std::vector<std::string> Argnames = {"__void"};
+    public:
+        ProtoExpr(std::string name, std::vector<std::string> args) : Name(name), Argnames(args) {}
+};
+
+class FunctionExpr
+{
+    std::unique_ptr<ProtoExpr> Proto;
+    std::unique_ptr<std::vector<Expr>> Body;
+    public:
+        FunctionExpr(std::unique_ptr<ProtoExpr> proto, std::unique_ptr<std::vector<Expr>> body) : Proto(std::move(proto)), Body(std::move(body)) {}
+};
+
 #pragma endregion // End AST region
 
 

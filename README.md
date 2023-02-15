@@ -1,4 +1,4 @@
-# Vortex *a Just In Time language*
+# Vortex *a something language*
 
 ## *What is it?*
 

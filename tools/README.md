@@ -21,14 +21,14 @@ If you haven't already, you must install cmake 3.18 or up and Visual Studio 17 o
 Cmake won't need much extra in order to build. Most linux distrobutions have gcc and g++ pre installed, but just make sure they are there and have the right version with ``gcc --version & g++ --version``. This program is able to compile with gcc and g++ version 12.2. You can get the versions of clang on you computer with ``clang --version & clang++ --version``, but you don't have to use clang.
 
 1. Make sure you have gcc and g++ version 12.2 or up, or clang and clang++ version 14 or up.
-2. Make and enter the build folder in the root folder using ``mkdir build & cd build``
+2. Make and enter the build folder in the root folder using ``mkdir build; cd build``
 3. Configure the project using ``cmake ..``
 4. Build the project using ``make``
 
 ## Linux > Windows
 
 1. Download x86_64-w64-mingw32 packages from your software manager if you havent already.
-2. Make and enter the build folder in the root folder using ``mkdir build & cd build``
+2. Make and enter the build folder in the root folder using ``mkdir build; cd build``
 3. Configure the project using ``cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/linux-win32.cmake``
 4. Build the project using ``make``
 

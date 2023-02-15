@@ -28,8 +28,9 @@ Cmake won't need much extra in order to build. Most linux distrobutions have gcc
 ## Linux > Windows
 
 1. Download x86_64-w64-mingw32 packages from your software manager if you havent already.
+    1. Check that your mingw32-gcc/mingw32-g++ versions are installed: ``x86_63-w64-mingw32-gcc --version; x86_63-w64-mingw32-g++ --version``
 2. Make and enter the build folder in the root folder using ``mkdir build; cd build``
-3. Configure the project using ``cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/linux-win32.cmake``
+3. Configure the project using ``cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/linux-win64.cmake``
 4. Build the project using ``make``
 
 ## Windows > Windows

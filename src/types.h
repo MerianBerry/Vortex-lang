@@ -55,4 +55,10 @@ namespace vtex
         }
         int type() override {return string;}
     };
+
+    class Function : public Type
+    {
+        public:
+        
+    };
 }

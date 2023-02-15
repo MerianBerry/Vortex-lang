@@ -10,6 +10,8 @@ namespace vtex
 {
     const inline std::vector<std::tuple<const char*, int>> keys =
     {
-        {"new", tok_new}
+        {"new", tok_new},
+        {"function", tok_func},
+        {"return", tok_ret}
     };
 }

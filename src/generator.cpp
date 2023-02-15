@@ -27,7 +27,9 @@
 
 namespace c = std::chrono;
 
-static unsigned int g_seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+bool verbose = true;
+
+unsigned int g_seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 inline long double fastrand() { 
   g_seed = (214013*g_seed+2531011); 
   return (long double)((g_seed>>16)&0x7FFF) / (long double)0x7FFF; 
@@ -154,7 +156,8 @@ class Expr
 {
     public:
         virtual ~Expr() = default;
-        virtual std::string tostring() = 0;
+        virtual std::string tostring() {return "";};
+        virtual int codegen() {return -2;}
 };
 
 class StringExpr : public Expr
@@ -166,6 +169,7 @@ class StringExpr : public Expr
         {
             return stringf("\"%s\"", Val.tostring().c_str());
         }
+        int codegen() override;
 };
 
 class NumberExpr : public Expr
@@ -177,6 +181,7 @@ class NumberExpr : public Expr
         {
             return Val.tostring();
         }
+        int codegen() override;
 };
 
 class VariableExpr : public Expr
@@ -189,6 +194,7 @@ class VariableExpr : public Expr
         {
             return Name;
         }
+        int codegen() override;
 };
 
 class ValueExpr : public Expr
@@ -202,6 +208,7 @@ class ValueExpr : public Expr
                 return "null";
             return Val->val->tostring();
         }
+        int codegen() override;
 };
 
 class BinopExpr : public Expr
@@ -217,20 +224,60 @@ class BinopExpr : public Expr
     }
 };
 
-class ProtoExpr
+class ProtoExpr : public Expr
 {
     std::string Name = "__anon_function";
     std::vector<std::string> Argnames = {"__void"};
     public:
-        ProtoExpr(std::string name, std::vector<std::string> args) : Name(name), Argnames(args) {}
+        ProtoExpr() {}
+        ProtoExpr(std::string name, std::vector<std::string> args) : Name(name)
+        {
+            if (args.size() != 0)
+            {
+                Argnames = args;
+            }
+        }
+    std::string tostring() override
+    {
+        std::string str = Name + " : ";
+        int a = 0;
+        for (const auto& name : Argnames)
+        {
+            if (a==0)
+            str+=name;
+            else
+            str+= ", " +name;
+            a++;
+        }
+        return str;
+    }
 };
 
-class FunctionExpr
+class FunctionExpr : public Expr
 {
     std::unique_ptr<ProtoExpr> Proto;
-    std::unique_ptr<std::vector<Expr>> Body;
+    std::vector<std::unique_ptr<Expr>> Body;
     public:
-        FunctionExpr(std::unique_ptr<ProtoExpr> proto, std::unique_ptr<std::vector<Expr>> body) : Proto(std::move(proto)), Body(std::move(body)) {}
+        FunctionExpr(std::unique_ptr<ProtoExpr> proto, std::vector<std::unique_ptr<Expr>>&& body) 
+        : Proto(std::move(proto))
+        {
+            for (auto& h : body)
+            {
+                Body.push_back(std::move(h));
+            }
+        }
+    std::string tostring() override
+    {
+        std::string str = Proto->tostring()+"\n{";
+        for (auto& E : Body)
+        {
+            //auto h = E.tostring();
+            //printf("'%s'\n", E.=->tostring().c_str());
+            str+="\n\t"+E->tostring()+";";
+        }
+        str+="\n}";
+        return str;
+    }
 };
 
 #pragma endregion // End AST region
@@ -238,21 +285,29 @@ class FunctionExpr
 
 #pragma region "Parser"
 
-static std::unordered_map<std::string, std::unique_ptr<VariableExpr>> usrvarmap;
-static std::unordered_map<std::string, int> binopmap;
+ std::unordered_map<std::string, std::unique_ptr<VariableExpr>> usrvarmap;
+ std::unordered_map<std::string, int> binopmap;
 
-static std::unique_ptr<Expr> LogError(const char* str)
+ std::unique_ptr<Expr> LogError(const char* str)
 {
+    //if (verbose)
     fprintf(stderr, "ERROR [Ln %zu, Col %lld]: %s\n", line, column, str);
     return nullptr;
 }
-static std::unique_ptr<Expr> LogStatus(const char* str)
+ std::unique_ptr<Expr> LogStatus(const char* str)
 {
+    if (verbose)
     fprintf(stderr, "Status [Ln %zu, Col %lld]: %s\n", line, column, str);
     return nullptr;
 }
+ void* LogNote(const char* str)
+{
+    //if (verbose)
+    fprintf(stderr, "Note [Ln %zu, Col %lld]: %s\n", line, column, str);
+    return nullptr;
+}
 
-static std::unique_ptr<vtex::Value> ParseString()
+ std::unique_ptr<vtex::Value> ParseString()
 {
     stringstr = "";
     while((curtok = getnext()) != '\"' && curtok != EOF)
@@ -269,7 +324,7 @@ static std::unique_ptr<vtex::Value> ParseString()
     return std::make_unique<vtex::Value>(std::make_unique<vtex::String>(stringstr));
 }
 
-static std::unique_ptr<Expr> ParseDefinition()
+ std::unique_ptr<Expr> ParseDefinition()
 {
     getnexttoken(); // Eat "new"
 
@@ -282,7 +337,108 @@ static std::unique_ptr<Expr> ParseDefinition()
     return std::make_unique<VariableExpr>(identstr.c_str());
 }
 
-static std::unique_ptr<Expr> ParsePrimary()
+ std::unique_ptr<ProtoExpr> ParsePrototype()
+{
+    getnexttoken(); // Eat "function"
+    //LogStatus("Found function specifier");
+    if (curtok == tok_ident)
+    {
+        LogStatus("Found function variable");
+        std::string name = identstr;
+        getnexttoken();
+        if (curtok != '(')
+        {
+            LogError("expected '(' after function specifier");
+            return nullptr;
+        }
+        getnexttoken();
+        std::vector<std::string> argnames = {};
+        while(curtok != ')')
+        {
+            if (curtok != tok_ident)
+            {
+                LogError("expected identifier in prototype argument definitions");
+                return nullptr;
+            }
+            LogStatus(stringf("Function parameter: \"%s\"", identstr.c_str()).c_str());
+            argnames.push_back(identstr);
+            getnexttoken();
+
+            
+            if (curtok != ',' && curtok == ')')
+            {
+                break;
+            } else if (curtok != ',' && curtok != ')')
+            {
+                LogError("expected ',' or ')' in prototype argument definitions");
+                return nullptr;
+            }
+            getnexttoken();
+        }
+        return std::make_unique<ProtoExpr>(name, argnames);
+    } else
+    {
+        LogStatus("Found first class function");
+        if (curtok != '(')
+        {
+            LogError("expected '(' after function specifier");
+            return nullptr;
+        }
+        getnexttoken();
+        std::vector<std::string> argnames = {};
+        while(curtok != ')')
+        {
+            if (curtok != tok_ident)
+            {
+                LogError("expected identifier in prototype argument definitions");
+                return nullptr;
+            }
+            LogStatus(stringf("Function parameter: \"%s\"", identstr.c_str()).c_str());
+            argnames.push_back(identstr);
+            getnexttoken();
+
+            
+            if (curtok != ',' && curtok == ')')
+            {
+                break;
+            } else if (curtok != ',' && curtok != ')')
+            {
+                LogError("expected ',' or ')' in prototype argument definitions");
+                return nullptr;
+            }
+            getnexttoken();
+        }
+        return std::make_unique<ProtoExpr>("__anon_function", argnames);
+    }
+}
+
+ std::vector<std::unique_ptr<Expr>> ParseScope();
+
+ std::unique_ptr<Expr> ParseFunction()
+{
+    std::unique_ptr<ProtoExpr> P = ParsePrototype();
+    std::vector<std::unique_ptr<Expr>> B = {};
+
+    getnexttoken();
+    if (curtok != '{' && !!P)
+    {
+        LogNote("Function has no scope");
+        return std::make_unique<FunctionExpr>(std::move(P), std::vector<std::unique_ptr<Expr>>(0));
+    } else if (!!P)
+    {
+        B = ParseScope();
+        if (B.size() != 0)
+        {
+            return std::make_unique<FunctionExpr>(std::move(P), std::move(B));
+        }
+        LogError("Scope body is nullptr, proceeding with proto only");
+        return std::make_unique<FunctionExpr>(std::move(P), std::vector<std::unique_ptr<Expr>>(0));
+    }
+
+    return LogError("Function prototype is invalid, cannot proceed with function creation");
+}
+
+ std::unique_ptr<Expr> ParsePrimary()
 {
     switch(curtok)
     {
@@ -299,12 +455,14 @@ static std::unique_ptr<Expr> ParsePrimary()
             {
                 return LogError(stringf("Unknown identity \"%s\" in expression", identstr.c_str()).c_str());
             }
+        case tok_func:
+            return ParseFunction();
         default:
             return LogError(stringf("unknown token %i in expression", curtok).c_str());
     }
 }
 
-static int GetBinopPrec()
+ int GetBinopPrec()
 {
     std::string str = static_cast<std::string>("")+(char)curtok;
     auto itr = binopmap.find(str);
@@ -313,7 +471,7 @@ static int GetBinopPrec()
     return itr->second;
 }
 
-static std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
+ std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
 {
     while(true)
     {
@@ -353,7 +511,7 @@ static std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
     }
 }
 
-static std::unique_ptr<Expr> ParseExpression()
+ std::unique_ptr<Expr> ParseExpression()
 {
     std::unique_ptr<Expr> LHS;
     std::unique_ptr<Expr> RHS;
@@ -362,7 +520,8 @@ static std::unique_ptr<Expr> ParseExpression()
 
     if (!LHS)
     {
-        return LogError("Left hand symbol (LHS) is null");
+        LogNote("Left hand symbol (LHS) is null");
+        return nullptr;
     }
     getnexttoken();
 
@@ -374,7 +533,7 @@ static std::unique_ptr<Expr> ParseExpression()
     return RHS;
 }
 
-static std::unique_ptr<Expr> ParseSet()
+ std::unique_ptr<Expr> ParseSet()
 {
     getnexttoken(); // Eat "="
 
@@ -387,7 +546,7 @@ static std::unique_ptr<Expr> ParseSet()
     return nullptr;
 }
 
-static std::unique_ptr<Expr> ParseIdentity()
+ std::unique_ptr<Expr> ParseIdentity()
 {
     auto lident = identstr;
 
@@ -409,10 +568,77 @@ static std::unique_ptr<Expr> ParseIdentity()
     return nullptr;
 }
 
+ std::unique_ptr<Expr> ParseAny()
+{
+    switch(curtok)
+    {
+        case EOF:
+            return nullptr;
+        case tok_new:
+            return ParseDefinition();
+            //break;
+        case tok_func:
+        {
+            auto F = ParseFunction();
+            if (!!F)
+                LogStatus(stringf("Function: %s", F->tostring().c_str()).c_str());
+            return F;
+            //break;
+        }
+            
+        case tok_ident:
+            return ParseIdentity();
+            //break;
+        case '{':
+            getnexttoken();
+            return nullptr;
+        case '=':
+            getnexttoken();
+            return ParseExpression();
+            //break;
+        default:
+            getnexttoken();
+            return nullptr;
+    }
+}
+
+ std::vector<std::unique_ptr<Expr>> ParseScope()
+{
+    getnexttoken();
+
+    
+    std::vector<std::unique_ptr<Expr>> vec;
+    while(curtok != '}')
+    {
+        auto A = ParseAny();
+        if (!!A)
+        {
+            //LogStatus(stringf("Scope EXPR: %s", (*A).tostring().c_str()).c_str());
+            vec.push_back(std::move(A));
+        }
+        if (!A)
+        {
+            //LogStatus("Scope Expr is null");
+        }
+        
+        if (curtok == -1)
+        {
+            LogError("Scope range extended to EOF");
+            return {};
+        }
+        //LogStatus(stringf("Token: %i", curtok).c_str());
+    }
+    //auto V = std::make_unique<std::vector<Expr>>(vec);
+    //LogStatus(stringf("Scope Expr body size: %zu", V->size()).c_str());
+    return vec;
+}
+
 #pragma endregion
 
 
 #pragma region "IR generator"
+std::string IR = "";
+
 
 
 
@@ -430,9 +656,18 @@ int compile()
             case tok_new:
                 ParseDefinition();
                 break;
+            case tok_func:
+            {
+                auto F = ParseFunction();
+                LogStatus(stringf("Function: %s", F->tostring().c_str()).c_str());
+                break;
+            }
+                
             case tok_ident:
                 ParseIdentity();
                 break;
+            case '{':
+                getnexttoken();
             case '=':
                 getnexttoken();
                 ParseExpression();
@@ -446,7 +681,7 @@ int compile()
 
 int main(int argc, char* argv[])
 {
-    newlevel("new a = \"hello\" new j = 23.420 j = 3\nnew h = 69.420 + 453 * j / 2");
+    newlevel("new h = 3+6");
 
     binopmap["+"] = 10;
     binopmap["-"] = 10;

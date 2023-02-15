@@ -22,19 +22,19 @@ Cmake won't need much extra in order to build. Most linux distrobutions have gcc
 
 1. Make sure you have gcc and g++ version 12.2 or up, or clang and clang++ version 14 or up.
 2. Make and enter the build folder in the root folder using ``mkdir build & cd build``
-3. Configure the project using ``cmake .``
+3. Configure the project using ``cmake ..``
 4. Build the project using ``make``
 
 ## Linux > Windows
 
 1. Download x86_64-w64-mingw32 packages from your software manager if you havent already.
 2. Make and enter the build folder in the root folder using ``mkdir build & cd build``
-3. Configure the project using ``cmake . -DCMAKE_TOOLCHAIN_FILE=../tools/linux-win32.cmake``
+3. Configure the project using ``cmake .. -DCMAKE_TOOLCHAIN_FILE=../tools/linux-win32.cmake``
 4. Build the project using ``make``
 
 ## Windows > Windows
 
 1. Make the build folder in the root folder using ``mkdir build``
 2. Enter the build folder using ``cd build``
-3. Configure the project using ``cmake .``
+3. Configure the project using ``cmake ..``
 4. Open the generated *.sln in Visual Studio and build it from there.

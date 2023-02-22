@@ -13,6 +13,10 @@ namespace vtex
         {"new", tok_new},
         {"global", tok_glob},
         {"function", tok_func},
+        {"true", tok_true},
+        {"false", tok_false},
+        {"if", tok_if},
+        {"else", tok_else},
         {"return", tok_ret}
     };
 }

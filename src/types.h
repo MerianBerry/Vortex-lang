@@ -26,14 +26,14 @@ namespace vtex
         virtual std::string tostring() {return "__null";};
         virtual int type() {return null;}
         virtual int equals(Type _t) {return false;};
-        virtual Type add(Type RHS) {return (Type){};}
-        virtual Type sub(Type RHS) {return (Type){};}
+        virtual Type add(Type RHS) {return {};}
+        virtual Type sub(Type RHS) {return {};}
     };
 
     class LFloat : public Type
     {
         long double Val = 0.0;
-        bool isnan = false;
+        //bool isnan = false;
         public:
         LFloat(long double Val) : Val(Val) {}
         void* get() override
@@ -62,7 +62,7 @@ namespace vtex
                 return LFloat(Val + (long double)*(bool*)RHS.get());
             }
 
-            return (Type){};
+            return {};
         }
         Type sub(Type RHS) override
         {
@@ -74,7 +74,7 @@ namespace vtex
                 return LFloat(Val - (long double)*(bool*)RHS.get());
             }
 
-            return (Type){};
+            return {};
         }
     };
 
@@ -130,7 +130,7 @@ namespace vtex
             Type add(Type RHS) override
             {
                 if (RHS.type() != boolean)
-                    return (Type){};
+                    return {};
 
                 return Boolean(Val | *(bool*)RHS.get());
             }

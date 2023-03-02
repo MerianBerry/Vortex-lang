@@ -1,3 +1,6 @@
+#include (./.env.cmake OPTIONAL RESULT_VARIABLE LOCAL_ENV)
+#message(STATUS "Local .env.cmake: ${LOCAL_ENV}")
+
 cmake_minimum_required(VERSION 3.18)
 
 function(post_build_copy target from dest)
@@ -9,6 +12,18 @@ function(post_build_copy target from dest)
             COMMENT "-- Post build copy of ${from} -> ${dest} --"
     )
 endfunction(post_build_copy)
+
+message(STATUS $ENV{VULKAN_SDK})
+if (DEFINED ENV{VULKAN_SDK})
+    set(Vulkan_LIBRARY "$ENV{VULKAN_SDK}")
+    set(Vulkan_LIBRARIES "$ENV{VULKAN_SDK}/Lib")
+    set(Vulkan_INCLUDE_DIRS "$ENV{VULKAN_SDK}/Include")
+    set(Vulkan_FOUND "True")
+    find_package(Vulkan REQUIRED)
+else()
+    find_package(Vulkan REQUIRED)
+endif()
+
 
 #set(CMAKE_CXX_FLAGS "--static")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wall")

@@ -93,7 +93,7 @@ namespace vtex
             Type add(Type RHS) override
             {
                 if (RHS.type() != boolean)
-                    return (Type){};
+                    return {};
 
                 return Boolean(Val | *(bool*)RHS.get());
             }
@@ -175,7 +175,7 @@ namespace vtex
                     return LFloat(Val + (long double)*(bool*)RHS.get());
                 }
 
-                return (Type){};
+                return {};
             }
             Type sub(Type RHS) override
             {

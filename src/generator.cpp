@@ -21,16 +21,25 @@
 #include <vector>
 #include <deque>
 #include <string>
+#include <sstream>
 #include <memory>
 #include <unordered_map>
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
 
+#define _CRT_SECURE_NO_WARNINGS
+
 namespace c = std::chrono;
 using std::unique_ptr; using std::make_unique;
 
-bool verbose = true;
+#if defined(NDEBUG)
+const bool __verbose = false;
+#else
+const bool __verbose = true;
+#endif
+
+bool verbose = true && __verbose;
 
 unsigned int g_seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
 inline long double fastrand() { 
@@ -39,7 +48,7 @@ inline long double fastrand() {
 } 
 
 FILE* __logfile = NULL;
-template<typename ... Args>
+/*template<typename ... Args>
 void* Logf(std::string fmt, Args ... args)
 {
     if (__logfile == nullptr)
@@ -47,7 +56,8 @@ void* Logf(std::string fmt, Args ... args)
         __logfile = fopen("log.txt", "w");
     }
     auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
+    tm tm;
+    localtime_s(&tm, &t);
     std::ostringstream oss;
     oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
     fprintf(__logfile, "[%s]: %s\n", oss.str().c_str(), stringf(fmt.c_str(), args...).c_str());
@@ -56,16 +66,18 @@ void* Logf(std::string fmt, Args ... args)
     #endif
 
     return nullptr;
-}
+}*/
 void* Logf(std::string fmt)
 {
     if (__logfile == nullptr)
     {
-        __logfile = fopen("log.txt", "w");
+        fopen_s(&__logfile, "log.txt", "w");
     }
     auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
+    tm tm;
+    localtime_s(&tm, &t);
     std::ostringstream oss;
+    
     oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
     fprintf(__logfile, "[%s]: %s\n", oss.str().c_str(), fmt.c_str());
     #if !defined(NPRINT)
@@ -157,7 +169,7 @@ static int gettok()
 
         for (const auto& [name, tok] : vtex::keys)
         {
-            if (strcasecmp(name, identstr.c_str()) == 0)
+            if (strcmp(name, identstr.c_str()) == 0)
             {
                 return tok;
             }
@@ -278,7 +290,7 @@ class BooleanExpr : public Expr
 class VariableExpr : public Expr
 {
     std::string Name = "";
-    bool isnan = true;
+    //bool isnan = false;
     public:
         VariableExpr(std::string Name) : Name(Name) {}
         std::string tostring() override
@@ -1078,7 +1090,7 @@ std::unique_ptr<Expr> ParseAny()
                 if (opstr == "=")
                 {
                     getnexttoken(); // Eat '='
-                    auto E = std::move(ParseExpression());
+                    auto E = ParseExpression();
                     //getnexttoken();
                     return std::move(E);
                 }
@@ -1159,7 +1171,7 @@ std::unique_ptr<Expr> ParseIf()
     if (curtok == tok_else)
     {
         getnexttoken(); // Eat "else"
-        ELSE = make_unique<ElseExpr>(std::move(ParseAny()));
+        ELSE = make_unique<ElseExpr>(ParseAny());
     }
 
     //LogStatus(stringf("Token after if: %i", curtok).c_str());
@@ -1271,6 +1283,7 @@ int main(int argc, char* argv[])
     
     auto start = c::high_resolution_clock::now();
     compile();
+    auto end = c::high_resolution_clock::now();
     if (ErrorOccurred)
     {
         Logf("Fatal error(s) have occurred while compilation and will not continue.");
@@ -1279,8 +1292,8 @@ int main(int argc, char* argv[])
     {
         Logf("Code was compiled successfully and will continue.");
     }
-    auto end = c::high_resolution_clock::now();
-    fprintf(stderr, "Compile time took %0.2fμs\n", c::duration<float, c::microseconds::period>(end-start).count());
+    
+    fprintf(stderr, "Compile time took %0.2fus\n", c::duration<float, c::microseconds::period>(end-start).count());
 
     if (ErrorOccurred)
     return -1;

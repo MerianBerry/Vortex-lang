@@ -71,7 +71,7 @@ void* Logf(std::string fmt)
 {
     if (__logfile == nullptr)
     {
-        #if defined(__WIN32)
+        #if defined(_WIN32)
         fopen_s(&__logfile, "log.txt", "w");
         #else
         __logfile = fopen("log.txt", "w");
@@ -79,7 +79,7 @@ void* Logf(std::string fmt)
     }
     auto t = std::time(nullptr);
     
-    #if defined(__WIN32)
+    #if defined(_WIN32)
     tm tm;
     localtime_s(&tm, &t);
     #else
@@ -87,7 +87,7 @@ void* Logf(std::string fmt)
     #endif
     std::ostringstream oss;
     
-    #if defined(__WIN32)
+    #if defined(_WIN32)
     oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
     #else
     oss << std::put_time(tm, "%d-%m-%Y %H-%M-%S");
@@ -103,7 +103,7 @@ void* Logf(std::string fmt)
 
 #pragma region "Lexer"
 
-std::vector<int> blacklist = {'.', '_', '(', ')', '{', '}', '[', ']', EOF};
+std::vector<int> blacklist = {'.', ',', '_', '(', ')', '{', '}', '[', ']', EOF};
 
 std::string file;
 size_t fiindex = 0;
@@ -763,7 +763,7 @@ std::unique_ptr<ProtoExpr> ParsePrototype()
             break;
         } else if (curtok != ',' && curtok != ')')
         {
-            LogError("Expected ',' or ')' in prototype argument definitions");
+            LogError(stringf("Expected ',' or ')' in prototype argument definitions, but got %i", curtok).c_str());
             return nullptr;
         }
         getnexttoken();
@@ -827,13 +827,13 @@ std::unique_ptr<Expr> ParsePrimary()
     }
 }
 
-int GetBinopPrec(std::string str)
+int GetBinopPrec()
 {
     for (const auto& itr : vtex::stdops)
     {
-        if (std::get<0>(itr) == str)
+        if (std::get<0>(itr) == opstr)
         {
-            opstr = "";
+            //opstr = "";
             return std::get<1>(itr);
         }
     }
@@ -845,13 +845,14 @@ std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
 {
     while(true)
     {
-        if (curtok>=tok_number && curtok<=tok_ident) // If unexpected token, just get rid of it
+        if (curtok>=tok_number && curtok<tok_ident) // If unexpected token, just get rid of it
         {
+            //LogStatus("HH");
             getnexttoken(); // hi
         }
         //LogStatus(opstr.c_str());
         auto op = opstr;
-        int Prec = GetBinopPrec(op);
+        int Prec = GetBinopPrec();
         if (Prec < Expected || blacklisted(curtok))
         {
             return LHS;
@@ -864,13 +865,14 @@ std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
         {
             return LogNote("Right hand symbol (RHS) is null");
         }
-
-        getnexttoken(); // Eat the primary... NOT GOOD, DO NOT USE PLEASE
+        //LogStatus(stringf("BRO %s", opstr.c_str()).c_str());
+        //if (getnexttoken() != tok_op) // Eat the primary... NOT GOOD, DO NOT USE PLEASE
+        //    LogStatus(stringf("BRUH %i", curtok).c_str());
         //LogStatus(stringf("supposedly an op: %i", curtok).c_str());
         //op = opstr;
 
         // If the next binop has more precedence, give it RHS with a higher expected precedence
-        int Next = GetBinopPrec(op);
+        int Next = GetBinopPrec();
 
         if (Prec < Next)
         {
@@ -886,6 +888,7 @@ std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
         //LogStatus(stringf("RHS end at token: %i", curtok).c_str());
         // Git branch merge
         LHS = std::make_unique<BinopExpr>(op, std::move(LHS), std::move(RHS));
+        opstr = "";
     }
 }
 
@@ -901,6 +904,8 @@ std::unique_ptr<Expr> ParseExpression()
         LogNote("Left hand symbol (LHS) is null");
         return nullptr;
     }
+
+    //LogStatus(stringf("LHS = %s", LHS->tostring().c_str()).c_str());
     //getnexttoken();
 
     RHS = ParseRHS(0, std::move(LHS));

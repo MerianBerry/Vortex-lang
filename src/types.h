@@ -208,7 +208,7 @@ namespace vtex
                 if (RHS.type() != number)
                     return {};
                 
-                return LFloat(std::fmod(Val, *(long double*)RHS.get()));
+                return LFloat(fmodl(Val, *(long double*)RHS.get()));
             }
             Type greater(Type RHS) override
             {

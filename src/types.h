@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <string>
 #include <memory>
+#include <math.h>
 
 
 namespace vtex
@@ -25,83 +26,25 @@ namespace vtex
         virtual void* get() { return nullptr; }
         virtual std::string tostring() {return "__null";};
         virtual int type() {return null;}
-        virtual int equals(Type _t) {return false;};
+        virtual Type equals(Type _t) {return (Type){};}
+        virtual Type nequals(Type RHS) {return (Type){};}
+        virtual Type operator !() {return (Type){};}
         virtual Type add(Type RHS) {return (Type){};}
         virtual Type sub(Type RHS) {return (Type){};}
-    };
+        virtual Type mul(Type RHS) {return (Type){};}
+        virtual Type div(Type RHS) {return (Type){};}
+        virtual Type fmod(Type RHS) {return (Type){};}
+        virtual Type greater(Type RHS) {return (Type){};}
+        virtual Type less(Type RHS) {return (Type){};}
+        virtual Type greatereq(Type RHS) {return (Type){};}
+        virtual Type lesseq(Type RHS) {return (Type){};}
+        virtual Type band(Type RHS) {return (Type){};}
+        virtual Type bor(Type RHS) {return (Type){};}
 
-    class LFloat : public Type
-    {
-        long double Val = 0.0;
-        bool isnan = false;
-        public:
-        LFloat(long double Val) : Val(Val) {}
-        void* get() override
-        {
-            return &Val;
-        }
-        std::string tostring() override
-        {
-            return std::to_string(Val);
-        }
-        int type() override {return number;}
-        int equals(Type _t) override
-        {
-            if (_t.type() != this->type())
-                return null;
-            auto num = *(long double*)_t.get();
-            return num > Val-0.0001 && num < Val+0.0001;
-        }
-        Type add(Type RHS) override
-        {
-            if (RHS.type() == number)
-            {
-                return LFloat(Val + *(long double*)RHS.get());
-            } else if (RHS.type() == boolean)
-            {
-                return LFloat(Val + (long double)*(bool*)RHS.get());
-            }
-
-            return (Type){};
-        }
-        Type sub(Type RHS) override
-        {
-            if (RHS.type() == number)
-            {
-                return LFloat(Val - *(long double*)RHS.get());
-            } else if (RHS.type() == boolean)
-            {
-                return LFloat(Val - (long double)*(bool*)RHS.get());
-            }
-
-            return (Type){};
-        }
-    };
-
-    class String : public Type
-    {
-        std::string str = "";
-        public:
-        String(std::string str) : str(str) {}
-        void* get() override
-        {
-            return &str;
-        }
-        std::string tostring() override
-        {
-            return stringf("\"%s\"", str.c_str());
-        }
-        int type() override {return string;}
-        int equals(Type _t) override
-        {
-            if (_t.type() != this->type())
-                return null;
-            return (*(std::string*)_t.get()) == str;
-        }
-        Type add(Type RHS) override
-        {
-            return String(str + RHS.tostring());
-        }
+        virtual Type operator &&(Type RHS) {return (Type){};}
+        virtual Type operator ||(Type RHS) {return (Type){};}
+        virtual Type operator ==(Type RHS) {return (Type){};}
+        virtual Type operator !=(Type RHS) {return (Type){};}
     };
 
     class Boolean : public Type
@@ -121,11 +64,31 @@ namespace vtex
                 return "false";
             }
             int type() override {return boolean;}
-            int equals(Type _t) override
+            Type equals(Type _t) override
             {
-                if (_t.type() != this->type())
-                return null;
-                return (*(bool*)_t.get()) == Val;
+                if (_t.type() != boolean)
+                    return Boolean(false);
+
+                return Boolean(Val == *(bool*)_t.get());
+            }
+            Type nequals(Type _t) override
+            {
+                if (_t.type() != boolean)
+                    return Boolean(false);
+
+                return Boolean(Val != *(bool*)_t.get());
+            }
+            Type operator !() override
+            {
+                return Boolean(!Val);
+            }
+            Type operator ==(Type RHS) override
+            {
+                return this->equals(RHS);
+            }
+            Type operator !=(Type RHS) override
+            {
+                return this->nequals(RHS);
             }
             Type add(Type RHS) override
             {
@@ -134,11 +97,187 @@ namespace vtex
 
                 return Boolean(Val | *(bool*)RHS.get());
             }
+            Type band(Type RHS) override
+            {
+                if (RHS.type() != boolean)
+                    return (Type){};
+
+                return Boolean(Val && *(bool*)RHS.get());
+            }
+            Type bor(Type RHS) override
+            {
+                if (RHS.type() != boolean)
+                    return (Type){};
+                
+                return Boolean(Val || *(bool*)RHS.get());
+            }
+
+            Type operator &&(Type RHS) override
+            {
+                if (RHS.type() != boolean)
+                    return (Type){};
+                
+                return Boolean(Val && *(bool*)RHS.get());
+            }
+            Type operator ||(Type RHS) override
+            {
+                if (RHS.type() != boolean)
+                    return (Type){};
+                
+                return Boolean(Val || *(bool*)RHS.get());
+            }
     };
 
-    class Function : public Type
+    class LFloat : public Type
     {
+        long double Val = 0.0;
+        bool isnan = false;
         public:
-        
+            LFloat(long double Val) : Val(Val) {}
+            void* get() override
+            {
+                return &Val;
+            }
+            std::string tostring() override
+            {
+                return std::to_string(Val);
+            }
+            int type() override {return number;}
+            Type equals(Type _t) override
+            {
+                if (_t.type() != number)
+                    return Boolean(false);
+                auto num = *(long double*)_t.get();
+                return Boolean(num > Val-0.0001 && num < Val+0.0001);
+            }
+            Type nequals(Type _t) override
+            {
+                if (_t.type() != number)
+                    return Boolean(false);
+                auto num = *(long double*)_t.get();
+                return Boolean(!(num > Val-0.0001 && num < Val+0.0001));
+            }
+            Type operator ==(Type RHS) override
+            {
+                return this->equals(RHS);
+            }
+            Type operator !=(Type RHS) override
+            {
+                return this->nequals(RHS);
+            }
+            Type add(Type RHS) override
+            {
+                if (RHS.type() == number)
+                {
+                    return LFloat(Val + *(long double*)RHS.get());
+                } else if (RHS.type() == boolean)
+                {
+                    return LFloat(Val + (long double)*(bool*)RHS.get());
+                }
+
+                return (Type){};
+            }
+            Type sub(Type RHS) override
+            {
+                if (RHS.type() == number)
+                {
+                    return LFloat(Val - *(long double*)RHS.get());
+                } else if (RHS.type() == boolean)
+                {
+                    return LFloat(Val - (long double)*(bool*)RHS.get());
+                }
+
+                return (Type){};
+            }
+            Type mul(Type RHS) override
+            {
+                if (RHS.type() == number)
+                    return LFloat(Val * *(long double*)RHS.get());
+                else
+                    return (Type){};
+            }
+            Type div(Type RHS) override
+            {
+                if (RHS.type() == number)
+                    return LFloat(Val / *(long double*)RHS.get());
+                else
+                    return (Type){};
+            }
+            Type fmod(Type RHS) override
+            {
+                if (RHS.type() != number)
+                    return (Type){};
+                
+                return LFloat(std::fmod(Val, *(long double*)RHS.get()));
+            }
+            Type greater(Type RHS) override
+            {
+                if (RHS.type() != number)
+                    return (Type){};
+                
+                return Boolean(Val > *(long double*)RHS.get());
+            }
+            Type less(Type RHS) override
+            {
+                if (RHS.type() != number)
+                    return (Type){};
+                
+                return Boolean(Val < *(long double*)RHS.get());
+            }
+            Type greatereq(Type RHS) override
+            {
+                if (RHS.type() != number)
+                    return (Type){};
+                
+                return Boolean(Val > *(long double*)RHS.get()) || *this == RHS;
+            }
+            Type lesseq(Type RHS) override
+            {
+                if (RHS.type() != number)
+                    return (Type){};
+                
+                return Boolean(Val < *(long double*)RHS.get()) || *this == RHS;
+            }
+    };
+
+    class String : public Type
+    {
+        std::string str = "";
+        public:
+            String(std::string str) : str(str) {}
+            void* get() override
+            {
+                return &str;
+            }
+            std::string tostring() override
+            {
+                return str;
+                //return stringf("%s", str.c_str());
+            }
+            int type() override {return string;}
+            Type equals(Type _t) override
+            {
+                if (_t.type() != this->type())
+                    return Boolean(false);
+                return Boolean(str == *(std::string*)_t.get());
+            }
+            Type nequals(Type _t) override
+            {
+                if (_t.type() != this->type())
+                    return Boolean(false);
+                return Boolean(!(str == *(std::string*)_t.get()));
+            }
+            Type operator ==(Type RHS) override
+            {
+                return this->equals(RHS);
+            }
+            Type operator !=(Type RHS) override
+            {
+                return this->nequals(RHS);
+            }
+            Type add(Type RHS) override
+            {
+                return String(str + RHS.tostring());
+            }
     };
 }

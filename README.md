@@ -16,4 +16,8 @@ In your dreams probably.
 
 NOTE: There is NO plans for classes, polymorphism, inheritance and the OPP stuff.
 
-Uh, there wont be a road map for a while
+Uh, there wont be a road map for a while.
+
+But currently, the parser is being created before the compiler and runner.
+
+If it will be a compiled, or JIT language, is still being determined.

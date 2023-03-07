@@ -126,6 +126,19 @@ static int getnext()
     }
     return c;
 }
+static int reverselexer()
+{
+    --fiindex;
+
+    --column;
+    if (column < 1)
+    {
+        --line;
+        column = 1;
+    }
+
+    return file[fiindex];
+}
 
 static int gettok()
 {
@@ -179,6 +192,13 @@ static int gettok()
             {
                 if (opstr.size() == 1)
                     curtok = opstr.at(0);
+                if (opstr == "//")
+                    return tok_1lc;
+                if (opstr == "/*")
+                    return tok_mlc;
+                if (opstr == "*/")
+                    return tok_mlce;
+                
                 return tok_op;
             }
         }
@@ -187,6 +207,8 @@ static int gettok()
     if (lastchar == EOF)
         return EOF;
 
+    if (lastchar == '\n' || lastchar == '\r')
+        printf("Bruh\n");
     auto thischar = lastchar;
     lastchar = getnext();
     return thischar;
@@ -194,6 +216,11 @@ static int gettok()
 
 static int getnexttoken()
 {
+    return (curtok = gettok());
+}
+static int reversetoken()
+{
+    reverselexer();
     return (curtok = gettok());
 }
 
@@ -209,6 +236,8 @@ class Expr
         virtual std::string tostring() {return "";};
         virtual int codegen() {return -2;}
 };
+
+typedef unique_ptr<Expr> uExpr;
 
 class StringExpr : public Expr
 {
@@ -259,6 +288,22 @@ class VariableExpr : public Expr
         int codegen() override;
 };
 
+class VsetExpr : public Expr
+{
+    uExpr Var = nullptr;
+    uExpr E = nullptr;
+    public:
+        VsetExpr(uExpr Var, uExpr E) : Var(std::move(Var)), E(std::move(E)) {}
+        std::string tostring() override
+        {
+            if (!Var || !E)
+                return "__null";
+            
+            std::string str = Var->tostring()+" = "+E->tostring();
+            return str;
+        }
+};
+
 class ValueExpr : public Expr
 {
     std::unique_ptr<vtex::Value> Val;
@@ -284,7 +329,7 @@ class BinopExpr : public Expr
     {
         if (!LHS || !RHS)
             return "__null";
-        return stringf("%s %s %s", LHS->tostring().c_str(), Op.c_str(), RHS->tostring().c_str());
+        return stringf("(%s %s %s)", LHS->tostring().c_str(), Op.c_str(), RHS->tostring().c_str());
     }
 };
 
@@ -321,7 +366,7 @@ class NullExpr : public Expr
 {
     public:
         NullExpr() {}
-        std::string tostring() override {return "null";}
+        std::string tostring() override {return "__null";}
         int codegen() override {return 0;}
 };
 
@@ -348,6 +393,20 @@ class BodyExpr : public Expr
                     str+="\t"+h->tostring();
                 ++a;
             }
+            return str;
+        }
+};
+
+class ReturnExpr : public Expr
+{
+    unique_ptr<Expr> Ret = nullptr;
+    public:
+        ReturnExpr(unique_ptr<Expr> Ret) : Ret(std::move(Ret)) {}
+        std::string tostring() override
+        {
+            if (!Ret)
+                return "__null";
+            std::string str = "return "+Ret->tostring();
             return str;
         }
 };
@@ -380,6 +439,55 @@ class ElseExpr : public Expr
             if (!Next)
                 return "__null";
             std::string str = "else:\n"+Next->tostring();
+            return str;
+        }
+};
+
+class WhileExpr : public Expr
+{
+    uExpr Condition = nullptr;
+    uExpr Next = nullptr;
+    //unique_ptr<Expr> Atend = nullptr;
+    public:
+        WhileExpr(uExpr Condition, uExpr Next) : Condition(std::move(Condition)), Next(std::move(Next)) {}
+        std::string tostring() override
+        {
+            if (!Condition || !Next)
+            {
+                return "__null";
+            }
+            std::string str = "while ("+Condition->tostring()+"):\n"+Next->tostring();
+            return str;
+        }
+};
+
+class BreakExpr : public Expr
+{
+    public:
+        BreakExpr() {}
+        std::string tostring() override
+        {
+            return "break";
+        }
+};
+
+class ForExpr : public Expr
+{
+    uExpr Var = nullptr;
+    uExpr Start = nullptr;
+    uExpr Iters = nullptr;
+    uExpr Iter = nullptr;
+    uExpr Next = nullptr;
+    public:
+        ForExpr(uExpr Var, uExpr Start, uExpr Iters, uExpr Iter, uExpr Next) : Var(std::move(Var)), Start(std::move(Start)),
+            Iters(std::move(Iters)), Iter(std::move(Iter)), Next(std::move(Next)) {}
+        std::string tostring() override
+        {
+            if (!Var || !Start || !Iters || !Iter)
+            {
+                return "__null";
+            }
+            std::string str = "for ("+Var->tostring()+", "+Start->tostring()+", "+Iters->tostring()+", "+Iter->tostring()+"):\n"+Next->tostring();
             return str;
         }
 };
@@ -535,6 +643,7 @@ void putglobvar(std::string name)
 std::unique_ptr<Expr> ParseScope();
 std::unique_ptr<Expr> ParseIdentity();
 std::unique_ptr<Expr> ParseIf();
+uExpr ParseWhile();
 
 std::unique_ptr<vtex::Value> ParseString()
 {
@@ -580,7 +689,7 @@ std::unique_ptr<Expr> ParseDefinition()
     //usrvarmap[name.c_str()] = 0;
     LogStatus(stringf("New variable \"%s\"", name.c_str()).c_str());
 
-    getnexttoken(); // Eat name
+    //getnexttoken(); // Eat name
     
     return std::make_unique<VariableExpr>(name.c_str());
 }
@@ -692,29 +801,37 @@ std::unique_ptr<Expr> ParsePrimary()
     }
 }
 
-int GetBinopPrec()
+int GetBinopPrec(std::string str)
 {
-    auto itr = binopmap.find(opstr);
-    if (itr == binopmap.end())
-        return -1;
-    return itr->second;
+    for (const auto& itr : vtex::stdops)
+    {
+        if (std::get<0>(itr) == str)
+        {
+            opstr = "";
+            return std::get<1>(itr);
+        }
+    }
+    //opstr = "";
+    return -1;
 }
 
 std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
 {
     while(true)
     {
-        if (curtok>=tok_number && curtok<=tok_ident)
+        if (curtok>=tok_number && curtok<=tok_ident) // If unexpected token, just get rid of it
         {
-            getnexttoken(); //hi
+            getnexttoken(); // hi
         }
-        int Prec = GetBinopPrec();
+        //LogStatus(opstr.c_str());
+        auto op = opstr;
+        int Prec = GetBinopPrec(op);
         if (Prec < Expected || blacklisted(curtok))
         {
             return LHS;
         }
-        auto op = opstr;
-
+        
+        //op = "";
         getnexttoken(); // Eat binop
         auto RHS = ParsePrimary();
         if (!RHS)
@@ -722,12 +839,13 @@ std::unique_ptr<Expr> ParseRHS(int Expected, std::unique_ptr<Expr> LHS)
             return LogNote("Right hand symbol (RHS) is null");
         }
 
-        //getnexttoken(); // Eat the primary... NOT GOOD, DO NOT USE PLEASE
+        getnexttoken(); // Eat the primary... NOT GOOD, DO NOT USE PLEASE
         //LogStatus(stringf("supposedly an op: %i", curtok).c_str());
-        
+        //op = opstr;
 
         // If the next binop has more precedence, give it RHS with a higher expected precedence
-        int Next = GetBinopPrec();
+        int Next = GetBinopPrec(op);
+
         if (Prec < Next)
         {
             RHS = ParseRHS(Prec+1, std::move(RHS));
@@ -765,19 +883,6 @@ std::unique_ptr<Expr> ParseExpression()
         LogStatus(stringf("RHS = %s", RHS->tostring().c_str()).c_str());
     }
     return RHS;
-}
-
-std::unique_ptr<Expr> ParseSet()
-{
-    getnexttoken(); // Eat "="
-
-    auto LHS = ParseExpression();
-    if (LHS != nullptr)
-    {
-        //LogStatus(stringf("LHS = %s", LHS->tostring().c_str()).c_str());
-    }
-    
-    return nullptr;
 }
 
 std::unique_ptr<Expr> ParseFcall(std::string fname)
@@ -820,6 +925,19 @@ std::unique_ptr<Expr> ParseFcall(std::string fname)
     return std::move(FC);
 }
 
+std::unique_ptr<Expr> ParseSet(std::string name)
+{
+    //getnexttoken(); // Eat "="
+
+    auto LHS = ParseExpression();
+    if (LHS != nullptr)
+    {
+        //LogStatus(stringf("LHS = %s", LHS->tostring().c_str()).c_str());
+    }
+    
+    return nullptr;
+}
+
 std::unique_ptr<Expr> ParseIdentity()
 {
     auto lident = identstr;
@@ -857,27 +975,45 @@ std::unique_ptr<Expr> ParseIdentity()
             return ParseFcall("__function:"+lident);
 
         default:
-            if (opstr == "=")
+        {
+            if (!varexists(lident))
+                return LogError(stringf("Unknown identity \"%s\" in expression", lident.c_str()).c_str());
+            /*for (const auto op : vtex::SetOps)
             {
-                if (!varexists(lident))
+                if (op == opstr)
                 {
-                    return LogError(stringf("Unknown identity \"%s\" in expression", lident.c_str()).c_str());
+                    if (!varexists(lident))
+                    {
+                        return LogError(stringf("Unknown identity \"%s\" in expression", lident.c_str()).c_str());
+                    }
+                    LogStatus(stringf("Variable write operation on \"%s\"", lident.c_str()).c_str());
+                    getnexttoken();
+                    return ParseSet(lident);
                 }
-                LogStatus(stringf("Variable write operation on \"%s\"", lident.c_str()).c_str());
-                getnexttoken();
-                return ParseExpression();
             }
 
-            if (varexists(lident))
-            {
-                LogStatus(stringf("Variable read operation on \"%s\"", lident.c_str()).c_str());
-                return std::make_unique<VariableExpr>(lident);
-            } else
-            {
-                return LogError(stringf("Unknown identity \"%s\" in expression", lident.c_str()).c_str());
-            }
+            
+
+            LogStatus(stringf("Variable read operation on \"%s\"", lident.c_str()).c_str());*/
+            return std::make_unique<VariableExpr>(lident);
+        }
     }
 }
+
+unique_ptr<Expr> ParseReturn()
+{
+    getnexttoken(); // Eat "return"
+
+    auto E = ParseExpression();
+    if (!E)
+    {
+        return LogError("Return expression is null");
+    }
+
+    auto R = make_unique<ReturnExpr>(std::move(E));
+    LogStatus(R->tostring().c_str());
+    return std::move(R);
+};
 
 bool BREAK = false;
 std::unique_ptr<Expr> ParseAny()
@@ -887,6 +1023,29 @@ std::unique_ptr<Expr> ParseAny()
         case EOF:
             BREAK = true;
             return nullptr;
+        case tok_1lc:
+            {
+                while (true)
+                {
+                    curtok = getnext();
+                    if (curtok == '\n' || curtok == '\r' || curtok == EOF) // Stop at new line, and dont eat the EOF
+                        break;
+                    //LogStatus(stringf("esh %i", curtok).c_str());
+                }
+                getnexttoken(); // Eat new line, and restore lexer
+            }
+            return ParseAny(); // Return expression after comment to fix things
+        case tok_mlc:
+            {
+                while(true)
+                {
+                    curtok = gettok();
+                    if (curtok == tok_mlce || curtok == EOF) // Stop at the multiline comment end token, and dont eat the EOF
+                        break;
+                }
+                getnexttoken(); // Eat multiline comment end, and restore lexer
+            }
+            return ParseAny(); // Return expression after comment to fix things
         case tok_new:
             return ParseDefinition();
             //break;
@@ -900,9 +1059,16 @@ std::unique_ptr<Expr> ParseAny()
         }
         case tok_if:
             return ParseIf();
+        case tok_while:
+            return ParseWhile();
+        case tok_break:
+            getnexttoken();
+            return make_unique<BreakExpr>();
         case tok_ident:
-            return ParseIdentity();
+            return ParseExpression();
             //break;
+        case tok_ret:
+            return ParseReturn();
         case '{':
             return ParseScope();
         case '}':
@@ -924,6 +1090,39 @@ std::unique_ptr<Expr> ParseAny()
     }
 }
 
+uExpr ParseWhile()
+{
+    getnexttoken(); // Eat "while"
+
+    if (curtok != '(')
+        return LogError("Expected '(' after \"while\"");
+
+    getnexttoken(); // Eat "("
+
+    auto E = ParseExpression();
+    if (!E)
+    {
+        return LogError("While loop argument expression is null");
+    }
+
+    if (curtok != ')')
+    {
+        return LogError("Exprected ')' after while loop argument expression");
+    }
+    getnexttoken(); // Eat ")"
+
+    auto A = ParseAny();
+
+    if (!A)
+    {
+        return LogError("While loop body is null");
+    }
+
+    auto WHILE = make_unique<WhileExpr>(std::move(E), std::move(A));
+    LogStatus(WHILE->tostring().c_str());
+    return std::move(WHILE);
+}
+
 std::unique_ptr<Expr> ParseIf()
 {
     getnexttoken(); // Eat "if"
@@ -939,12 +1138,12 @@ std::unique_ptr<Expr> ParseIf()
 
     if (!E)
     {
-        LogError("If statement argument is null");
+        LogError("If statement argument expression is null");
     }
 
     if (curtok != ')')
     {
-        return LogError("Expected ')' to end if statement argument");
+        return LogError("Expected ')' to end if statement argument expression");
     }
     getnexttoken(); // Eat ")"
 
@@ -1063,8 +1262,11 @@ int main(int argc, char* argv[])
     newlevel(stream.str());
     f.close();
 
+    //vtex::stdops.push_back({"+", vtex::Value::add});
     binopmap["+"] = 10;
     binopmap["-"] = 10;
+    binopmap["*"] = 30;
+    binopmap["/"] = 30;
     binopmap["=="] = 5;
     
     auto start = c::high_resolution_clock::now();

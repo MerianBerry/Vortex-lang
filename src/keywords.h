@@ -17,6 +17,9 @@ namespace vtex
         {"false", tok_false},
         {"if", tok_if},
         {"else", tok_else},
+        {"while", tok_while},
+        {"for", tok_for},
+        {"break", tok_break},
         {"return", tok_ret}
     };
 }

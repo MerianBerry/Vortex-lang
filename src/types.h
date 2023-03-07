@@ -26,25 +26,25 @@ namespace vtex
         virtual void* get() { return nullptr; }
         virtual std::string tostring() {return "__null";};
         virtual int type() {return null;}
-        virtual Type equals(Type _t) {return (Type){};}
-        virtual Type nequals(Type RHS) {return (Type){};}
-        virtual Type operator !() {return (Type){};}
-        virtual Type add(Type RHS) {return (Type){};}
-        virtual Type sub(Type RHS) {return (Type){};}
-        virtual Type mul(Type RHS) {return (Type){};}
-        virtual Type div(Type RHS) {return (Type){};}
-        virtual Type fmod(Type RHS) {return (Type){};}
-        virtual Type greater(Type RHS) {return (Type){};}
-        virtual Type less(Type RHS) {return (Type){};}
-        virtual Type greatereq(Type RHS) {return (Type){};}
-        virtual Type lesseq(Type RHS) {return (Type){};}
-        virtual Type band(Type RHS) {return (Type){};}
-        virtual Type bor(Type RHS) {return (Type){};}
+        virtual Type equals(Type _t) {return {};}
+        virtual Type nequals(Type RHS) {return {};}
+        virtual Type operator !() {return {};}
+        virtual Type add(Type RHS) {return {};}
+        virtual Type sub(Type RHS) {return {};}
+        virtual Type mul(Type RHS) {return {};}
+        virtual Type div(Type RHS) {return {};}
+        virtual Type fmod(Type RHS) {return {};}
+        virtual Type greater(Type RHS) {return {};}
+        virtual Type less(Type RHS) {return {};}
+        virtual Type greatereq(Type RHS) {return {};}
+        virtual Type lesseq(Type RHS) {return {};}
+        virtual Type band(Type RHS) {return {};}
+        virtual Type bor(Type RHS) {return {};}
 
-        virtual Type operator &&(Type RHS) {return (Type){};}
-        virtual Type operator ||(Type RHS) {return (Type){};}
-        virtual Type operator ==(Type RHS) {return (Type){};}
-        virtual Type operator !=(Type RHS) {return (Type){};}
+        virtual Type operator &&(Type RHS) {return {};}
+        virtual Type operator ||(Type RHS) {return {};}
+        virtual Type operator ==(Type RHS) {return {};}
+        virtual Type operator !=(Type RHS) {return {};}
     };
 
     class Boolean : public Type
@@ -100,14 +100,14 @@ namespace vtex
             Type band(Type RHS) override
             {
                 if (RHS.type() != boolean)
-                    return (Type){};
+                    return {};
 
                 return Boolean(Val && *(bool*)RHS.get());
             }
             Type bor(Type RHS) override
             {
                 if (RHS.type() != boolean)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val || *(bool*)RHS.get());
             }
@@ -115,14 +115,14 @@ namespace vtex
             Type operator &&(Type RHS) override
             {
                 if (RHS.type() != boolean)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val && *(bool*)RHS.get());
             }
             Type operator ||(Type RHS) override
             {
                 if (RHS.type() != boolean)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val || *(bool*)RHS.get());
             }
@@ -187,54 +187,54 @@ namespace vtex
                     return LFloat(Val - (long double)*(bool*)RHS.get());
                 }
 
-                return (Type){};
+                return {};
             }
             Type mul(Type RHS) override
             {
                 if (RHS.type() == number)
                     return LFloat(Val * *(long double*)RHS.get());
                 else
-                    return (Type){};
+                    return {};
             }
             Type div(Type RHS) override
             {
                 if (RHS.type() == number)
                     return LFloat(Val / *(long double*)RHS.get());
                 else
-                    return (Type){};
+                    return {};
             }
             Type fmod(Type RHS) override
             {
                 if (RHS.type() != number)
-                    return (Type){};
+                    return {};
                 
                 return LFloat(std::fmod(Val, *(long double*)RHS.get()));
             }
             Type greater(Type RHS) override
             {
                 if (RHS.type() != number)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val > *(long double*)RHS.get());
             }
             Type less(Type RHS) override
             {
                 if (RHS.type() != number)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val < *(long double*)RHS.get());
             }
             Type greatereq(Type RHS) override
             {
                 if (RHS.type() != number)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val > *(long double*)RHS.get()) || *this == RHS;
             }
             Type lesseq(Type RHS) override
             {
                 if (RHS.type() != number)
-                    return (Type){};
+                    return {};
                 
                 return Boolean(Val < *(long double*)RHS.get()) || *this == RHS;
             }

@@ -71,14 +71,28 @@ void* Logf(std::string fmt)
 {
     if (__logfile == nullptr)
     {
+        #if defined(__WIN32)
         fopen_s(&__logfile, "log.txt", "w");
+        #else
+        __logfile = fopen("log.txt", "w");
+        #endif
     }
     auto t = std::time(nullptr);
+    
+    #if defined(__WIN32)
     tm tm;
     localtime_s(&tm, &t);
+    #else
+    auto tm = localtime(&t);
+    #endif
     std::ostringstream oss;
     
+    #if defined(__WIN32)
     oss << std::put_time(&tm, "%d-%m-%Y %H-%M-%S");
+    #else
+    oss << std::put_time(tm, "%d-%m-%Y %H-%M-%S");
+    #endif
+
     fprintf(__logfile, "[%s]: %s\n", oss.str().c_str(), fmt.c_str());
     #if !defined(NPRINT)
     fprintf(stderr, "[%s]: %s\n", oss.str().c_str(), fmt.c_str());

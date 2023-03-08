@@ -103,7 +103,7 @@ void* Logf(std::string fmt)
 
 #pragma region "Lexer"
 
-std::vector<int> blacklist = {'.', ',', '_', '(', ')', '{', '}', '[', ']', EOF};
+std::vector<int> blacklist = {'.', ',', '\"', '\'', '_', '(', ')', '{', '}', '[', ']', EOF};
 
 std::string file;
 size_t fiindex = 0;
@@ -140,7 +140,7 @@ static int getnext()
         //printf("End at index %lu\n", fiindex);
         return EOF;
     }
-    char c = file[fiindex];
+    int c = file[fiindex];
     ++fiindex;
     //printf("strchar = '%c'\n", (char)c);
     
@@ -169,6 +169,8 @@ static int reverselexer()
 static int gettok()
 {
     opstr = "";
+    if (lastchar <= -1 || lastchar > 255)
+        return -1;
     while(isspace(lastchar))
         lastchar = getnext();
     
@@ -260,7 +262,7 @@ class Expr
     public:
         virtual ~Expr() = default;
         virtual std::string tostring() {return "";};
-        virtual vtex::Value codegen() {return {};}
+        virtual std::unique_ptr<vtex::Value> codegen() {return {};}
 };
 
 typedef unique_ptr<Expr> uExpr;
@@ -274,7 +276,7 @@ class StringExpr : public Expr
         {
             return stringf("\"%s\"", Val.tostring().c_str());
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class NumberExpr : public Expr
@@ -286,7 +288,7 @@ class NumberExpr : public Expr
         {
             return Val.tostring();
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class BooleanExpr : public Expr
@@ -298,20 +300,24 @@ class BooleanExpr : public Expr
         {
             return Val.tostring();
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class VariableExpr : public Expr
 {
     std::string Name = "";
+    std::unique_ptr<vtex::Value> Val = nullptr;
     //bool isnan = false;
     public:
         VariableExpr(std::string Name) : Name(Name) {}
         std::string tostring() override
         {
-            return "@"+Name;
+            std::string str = "@"+Name;
+            if (!!Val)
+                str+=":"+Val->tostring();
+            return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class VsetExpr : public Expr
@@ -332,16 +338,16 @@ class VsetExpr : public Expr
 
 class ValueExpr : public Expr
 {
-    std::unique_ptr<vtex::Value> Val;
+    vtex::Value Val;
     public:
-        ValueExpr(std::unique_ptr<vtex::Value> Val) : Val(std::move(Val)) {}
+        ValueExpr(vtex::Value Val) : Val(std::move(Val)) {}
         std::string tostring() override
         {
-            if (!Val)
-                return "__null";
-            return Val->tostring();
+            //if (!Val)
+            //    return "__null";
+            return Val.tostring();
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class BinopExpr : public Expr
@@ -357,7 +363,7 @@ class BinopExpr : public Expr
                 return "__null";
             return stringf("(%s %s %s)", LHS->tostring().c_str(), Op.c_str(), RHS->tostring().c_str());
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class ProtoExpr : public Expr
@@ -387,7 +393,7 @@ class ProtoExpr : public Expr
             }
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class NullExpr : public Expr
@@ -395,7 +401,7 @@ class NullExpr : public Expr
     public:
         NullExpr() {}
         std::string tostring() override {return "__null";}
-        vtex::Value codegen() override {return {};}
+        std::unique_ptr<vtex::Value> codegen() override {return {};}
 };
 
 class BodyExpr : public Expr
@@ -423,7 +429,7 @@ class BodyExpr : public Expr
             }
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class ReturnExpr : public Expr
@@ -438,7 +444,7 @@ class ReturnExpr : public Expr
             std::string str = "return "+Ret->tostring();
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class IfExpr : public Expr
@@ -457,7 +463,7 @@ class IfExpr : public Expr
                 str+="\n"+Else->tostring();
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class ElseExpr : public Expr
@@ -472,7 +478,7 @@ class ElseExpr : public Expr
             std::string str = "else:\n"+Next->tostring();
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class BreakExpr : public Expr
@@ -483,7 +489,7 @@ class BreakExpr : public Expr
         {
             return "break";
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class WhileExpr : public Expr
@@ -502,7 +508,7 @@ class WhileExpr : public Expr
             std::string str = "while ("+Condition->tostring()+"):\n"+Next->tostring();
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class ForExpr : public Expr
@@ -524,7 +530,7 @@ class ForExpr : public Expr
             std::string str = "for ("+Var->tostring()+", "+Start->tostring()+", "+Iters->tostring()+", "+Iter->tostring()+"):\n"+Next->tostring();
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class FunctionExpr : public Expr
@@ -552,7 +558,7 @@ class FunctionExpr : public Expr
             str+="\n}";
             return str;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 class CalleeExpr : public Expr
@@ -583,7 +589,7 @@ class CalleeExpr : public Expr
             }
             return out;
         }
-        vtex::Value codegen() override;
+        std::unique_ptr<vtex::Value> codegen() override;
 };
 
 #pragma endregion // End AST region
@@ -690,7 +696,7 @@ std::unique_ptr<Expr> ParseIdentity();
 std::unique_ptr<Expr> ParseIf();
 uExpr ParseWhile();
 
-std::unique_ptr<vtex::Value> ParseString()
+vtex::Value ParseString()
 {
     stringstr = "";
     while((curtok = getnext()) != '\"' && curtok != EOF)
@@ -700,11 +706,12 @@ std::unique_ptr<vtex::Value> ParseString()
     if (curtok == EOF)
     {
         LogError("String literall extends to EOF");
-        return nullptr;
+        return {};
     }
-
-    lastchar = getnexttoken(); // Eat ending '"' and restore the lexer
-    return std::make_unique<vtex::Value>(std::make_unique<vtex::String>(stringstr));
+    
+    getnexttoken(); // Eat ending '"' and restore the lexer
+    lastchar = 0; // Fix the lexers last character so it doesnt go infinite
+    return vtex::Value(std::make_unique<vtex::String>(stringstr));
 }
 
 std::unique_ptr<Expr> ParseDefinition()
@@ -823,7 +830,11 @@ std::unique_ptr<Expr> ParsePrimary()
     switch(curtok)
     {
         case tok_number:
-            return std::make_unique<ValueExpr>(std::make_unique<vtex::Value>(std::make_unique<vtex::LFloat>(strtold(numstr.c_str(), nullptr))));
+        {
+            auto V = vtex::Value( std::make_unique<vtex::LFloat>(strtold(numstr.c_str(), nullptr)) );
+            return std::make_unique<ValueExpr>(std::move(V));
+        }
+            //return std::make_unique<ValueExpr>(vtex::Value( std::make_unique<vtex::LFloat>(strtold(numstr.c_str(), nullptr)) ) );
         case tok_string:
             {
                 auto S = std::make_unique<ValueExpr>(ParseString());
@@ -999,14 +1010,14 @@ std::unique_ptr<Expr> ParseIdentity()
         case tok_true:
             {
                 //auto B = std::make_unique<BooleanExpr>(vtex::Boolean(true));
-                auto B = std::make_unique<ValueExpr>(std::make_unique<vtex::Value>(std::make_unique<vtex::Boolean>(true)));
+                auto B = std::make_unique<ValueExpr>(vtex::Value(std::make_unique<vtex::Boolean>(true)));
                 getnexttoken();
                 return std::move(B);
             }
             
         case tok_false:
             {
-                auto B = std::make_unique<ValueExpr>(std::make_unique<vtex::Value>(std::make_unique<vtex::Boolean>(false)));
+                auto B = std::make_unique<ValueExpr>(vtex::Value(std::make_unique<vtex::Boolean>(false)));
                 getnexttoken();
                 return std::move(B);
             }
@@ -1284,90 +1295,98 @@ vtex::opfunc FindOpFunction(std::string str)
     return nullptr;
 }
 
-vtex::Value StringExpr::codegen()
+std::unique_ptr<vtex::Value> StringExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value NumberExpr::codegen()
+std::unique_ptr<vtex::Value> NumberExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value BooleanExpr::codegen()
+std::unique_ptr<vtex::Value> BooleanExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value VariableExpr::codegen()
+std::unique_ptr<vtex::Value> VariableExpr::codegen()
 {
-    return vtex::Value(std::make_unique<vtex::Type>());
-}
-
-vtex::Value ValueExpr::codegen()
-{
+    if (!Val)
+        Val = std::make_unique<vtex::Value>(std::make_unique<vtex::Type>());
     return std::move(Val);
 }
 
-vtex::Value BinopExpr::codegen()
+std::unique_ptr<vtex::Value> ValueExpr::codegen()
+{
+    return std::make_unique<vtex::Value>(std::move(Val));
+}
+
+std::unique_ptr<vtex::Value> BinopExpr::codegen()
 {
     auto OP = FindOpFunction(Op);
     if (!!OP && !!LHS && !!RHS)
     {
-        //LogStatus(stringf("%s(%s, %s)", Op.c_str(), LHS->codegen().val->tostring().c_str(), RHS->tostring().c_str()));
-        LogStatus((OP(LHS->codegen().val, *RHS->codegen().val)).tostring());
+        //LogStatus(stringf("%s(%s, %s)", Op.c_str(), LHS->tostring().c_str(), RHS->tostring().c_str()));
+        //if (!!d)
+        auto OR = OP(std::move(LHS->codegen()->val), *RHS->codegen()->val);
+        LogStatus(OR.tostring());
+        auto R = std::make_unique<vtex::Value>(std::make_unique<vtex::Type>(std::move(OR)));
+        LogStatus(R->tostring());
+        return std::move(R);
+        //LogStatus((OP(std::move(LHS->codegen()->val), *RHS->codegen()->val)).tostring());
     }
-    return {};
+    return nullptr;
 }
 
-vtex::Value ProtoExpr::codegen()
+std::unique_ptr<vtex::Value> ProtoExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value BodyExpr::codegen()
+std::unique_ptr<vtex::Value> BodyExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value FunctionExpr::codegen()
+std::unique_ptr<vtex::Value> FunctionExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value CalleeExpr::codegen()
+std::unique_ptr<vtex::Value> CalleeExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value ReturnExpr::codegen()
+std::unique_ptr<vtex::Value> ReturnExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value IfExpr::codegen()
+std::unique_ptr<vtex::Value> IfExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value ElseExpr::codegen()
+std::unique_ptr<vtex::Value> ElseExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value BreakExpr::codegen()
+std::unique_ptr<vtex::Value> BreakExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value WhileExpr::codegen()
+std::unique_ptr<vtex::Value> WhileExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
-vtex::Value ForExpr::codegen()
+std::unique_ptr<vtex::Value> ForExpr::codegen()
 {
-    return {};
+    return nullptr;
 }
 
 

@@ -9,11 +9,13 @@ namespace vtex
     class Value
     {
         public:
-        std::unique_ptr<vtex::Type> val;
-            Value(std::unique_ptr<vtex::Type> val) : val(std::move(val)) {}
+        uType val;
+            Value(uType val) : val(std::move(val)) {}
             Value(std::unique_ptr<vtex::Value> Val) : val(std::move(Val->val)) {}
             Value() {}
-            explicit Value(Value && Val) : val(std::forward<uType>(Val.val)) {}
+            Value(Value && Val) : val(std::forward<uType>(Val.val)) {}
+            uType &value() {return val;}
+            //const uType value() {return std::move(val);}
             std::string tostring()
             {
                 if (!!val)
